@@ -91,10 +91,63 @@ class Ctx:
         """The inventory slot id (0-35) holding `item`, or None."""
         inv = self.body.call("inventory")
         for s in inv.get("hotbar", []) + inv.get("main", []):
-            it = s.get("item")
-            if it and it.get("item") == item:
+            if s.get("item") == item:
                 return s["slot"]
         return None
+
+    def to_hotbar(self, item):
+        """Make sure `item` is on the hotbar (placing and using need it there): swap it
+        in from the backpack through the inventory screen. True when it's there."""
+        item = item if ":" in item else "minecraft:" + item
+        slot = self.slot_of(item)
+        if slot is None:
+            return False
+        if slot < 9:
+            return True
+        inv = self.body.call("inventory")
+        hot = inv.get("hotbar", [])
+        # An empty hotbar slot, else the last one that isn't a tool or food.
+        target = next((s["slot"] for s in hot if not s.get("item")), None)
+        if target is None:
+            keep = ("pickaxe", "sword", "axe", "shovel", "torch") + tuple(FOODS)
+            target = next((s["slot"] for s in reversed(hot)
+                           if not any(k in s["item"] for k in keep)), 8)
+        self.body.call("open-inventory")
+        self.body.call(f"click-slot {slot}")
+        self.body.call(f"click-slot {target}")
+        self.body.call(f"click-slot {slot}")
+        self.body.call("close")
+        return (self.slot_of(item) or 99) < 9
+
+    def place(self, pos, item):
+        """Place `item` at pos (moving it to the hotbar first). The reply."""
+        self.to_hotbar(item)
+        short = item.removeprefix("minecraft:")
+        return self.body.call(f"place {pos[0]} {pos[1]} {pos[2]} --item {short}")
+
+    JUNK = ("andesite", "diorite", "granite", "tuff", "dirt", "gravel", "leaf_litter",
+            "sapling", "flint", "calcite", "dripstone", "netherrack", "cobbled_deepslate")
+
+    def drop_junk(self, keep_cobble=64):
+        """When the inventory is getting full, throw away stone and dirt it doesn't need."""
+        inv = self.body.call("inventory")
+        slots = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
+        if len(slots) < 30:
+            return
+        yaw = self.state()["player"]["yaw"]
+        self.body.call(f"look {yaw + 180:.0f} 20")  # throw it behind, back up the tunnel
+        cobble = 0
+        for s in slots:
+            it = s["item"]
+            if it == "minecraft:cobblestone":
+                cobble += s.get("count", 0)
+                if cobble <= keep_cobble:
+                    continue
+            elif not any(j in it for j in self.JUNK):
+                continue
+            self.body.call("open-inventory")
+            self.body.call(f"click-slot {s['slot']}")
+            self.body.call("close")  # a stack held on the cursor is thrown when it closes
 
     def select_best(self, short_names):
         n = self.has(short_names)
@@ -232,6 +285,25 @@ class Ctx:
             self.body.call("wait 10")
 
     # --- reflexes --------------------------------------------------------------------
+    def survive(self):
+        """Out of air: swim up. Standing in lava or fire: get out. True when it acted."""
+        try:
+            p = self.state()["player"]
+        except Exception:
+            return False
+        if p.get("air", 300) < 120:
+            self.body.call("key space down")
+            self.body.call("wait 15")
+            self.body.call("key space up")
+            return True
+        x, y, z = p["block_pos"]
+        r = self.senses.call(f"blocks {x} {y - 1} {z} {x} {y + 1} {z}")
+        hot = [b for b in r.get("blocks", []) if any(h in b[3] for h in ("minecraft:lava", "fire"))]
+        if hot:
+            self.body.call("move back 0.6 --sprint --jump")
+            self.body.call("move left 0.4 --jump")
+            return True
+        return False
     def maybe_eat(self):
         try:
             food = self.state()["player"]["food"]
@@ -261,6 +333,8 @@ class Task:
         """Reflex: fight a hostile it can see that is close to the owner or to Keve.
         True when it fought something (the caller then loops again)."""
         ctx = self.ctx
+        if ctx.survive():
+            return True
         o = ctx.owner()
         _, _, _, pos = ctx.eye_and_view()
         targets = ctx.visible_hostiles(pos, self_radius)
@@ -399,8 +473,9 @@ class Gather(Task):
                        if block_ok(n) and ctx.bad_targets.get(p, 0) < 2]
             if not targets:
                 if not ctx.look_around(block_ok):
-                    if explores >= 6:
-                        ctx.say(f"I can't find any {shown} I can see around here.")
+                    if explores >= self.args.get("max_explores", 6):
+                        if not self.args.get("quiet_fail"):
+                            ctx.say(f"I can't find any {shown} I can see around here.")
                         return
                     explores += 1
                     ang = random.uniform(0, 2 * math.pi)
@@ -454,9 +529,15 @@ class Give(Task):
     def run_inner(self, task):
         ctx = self.ctx
         what = self.args.get("item")  # a GATHER word, or None for everything
-        if what is None and not self.args.get("everything") and ctx.last_item:
-            what = ctx.last_item  # "bring them to me": what it just gathered
-        item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
+        exact = self.args.get("items")  # exact item ids, e.g. from mining or crafting
+        if exact:
+            ids = {i if ":" in i else "minecraft:" + i for i in exact}
+            item_ok = lambda i: i in ids  # noqa: E731
+            what = ", ".join(sorted(i.removeprefix("minecraft:").replace("_", " ") for i in ids))
+        else:
+            if what is None and not self.args.get("everything") and ctx.last_item:
+                what = ctx.last_item  # "bring them to me": what it just gathered
+            item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
         items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
         if not items:
             ctx.say(f"I don't have any {what or 'items'}.")
@@ -599,11 +680,12 @@ class Help(Task):
 
 HELP_LINES = [
     "things you can tell me (start with 'keve'):",
-    "follow me / come here / stay / stop / look at me / jump",
-    "get 10 wood, grab 5 dirt, collect sand, mine 20 stone (needs a pickaxe), gravel",
-    "...and bring them to me / give me your sand / give me everything",
-    "defend me (I fight mobs I can see near you) / what you got",
-    "or just talk to me.",
+    "follow me / come here / stay / stop / play with me (I do my own thing alongside you)",
+    "get 10 wood, grab 5 dirt, collect sand, get some sugar cane ...and bring them to me",
+    "mine for diamonds / get me 10 iron / go mine some coal (I make my own pickaxes)",
+    "make a stone pickaxe / craft 16 torches / make a furnace",
+    "defend me / this is home / go home / remember this as the mine / go to the mine",
+    "give me your sand / give me everything / what you got / or just talk to me.",
 ]
 
 SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Defend, Status, Jump, LookAtMe, Help)}

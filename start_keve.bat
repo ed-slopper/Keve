@@ -42,8 +42,8 @@ set "SOCK=%KEVE_HOME%\keve-ctl.json"
 set "HORIZON_HOME=%KEVE_HOME%\home"
 
 echo.
-echo Starting Keve's game (headless, no window, no GPU) and joining !ADDR! ...
-"!CTL!" --socket "!SOCK!" launch --headless --server !ADDR! --name Keve --player-dir "%KEVE_HOME%\player"
+echo Starting Keve's game (no window) and joining !ADDR! ...
+"!CTL!" --socket "!SOCK!" launch --offscreen --server !ADDR! --name Keve --player-dir "%KEVE_HOME%\player" --width 640 --height 360 --render-distance 4
 if errorlevel 1 (
   echo Keve's game did not start. Its log is in %KEVE_HOME%.
   pause

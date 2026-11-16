@@ -22,13 +22,57 @@ In game, type **`keve help`** for this list. Typing `/help keve` won't work: com
 | `keve get 10 wood` / `keve chop some trees` | Looks around, walks to trees it can see, chops the logs and picks them up |
 | `keve grab 5 dirt`, `keve collect sand`, `keve get 8 gravel` | The same for dirt, sand and gravel |
 | `keve get some sugar cane`, `keve get 3 pumpkins`, `keve get clay` | Sugar cane, pumpkins and clay too |
-| `keve mine 20 stone` | Cobblestone (needs a pickaxe in its inventory) |
+| `keve mine 20 stone` | Cobblestone. It makes itself a pickaxe first if it has none |
 | `... and bring them to me` | When it's done, walks to you and drops them at you. Works with any of the above, e.g. `keve mine 10 sand and drop them to me` |
 | `keve bring me the sand` / `keve give me your logs` / `keve bring them to me` | Hands over what it **already has**: the named item, or whatever it gathered last |
 | `keve give me everything` | Hands over its whole inventory |
 | `keve bring me 5 sand` / `keve bring me some sand` | With an amount, it gets new ones first, then brings them |
 
 Numbers can be words: "a few", "some", "ten", "a stack". With no number it gets 10. Ask for something it can't get yet ("get me diamonds") and it says so, instead of guessing.
+
+## Mining
+
+| You type | Keve does |
+| --- | --- |
+| `keve mine for diamonds` / `keve get me 3 diamonds` | Goes all the way: makes its tools, digs a staircase down to y -58, takes the iron it sees on the way, smelts it into an iron pickaxe, branch-mines and comes back up |
+| `keve get me 10 iron` / `keve go mine some coal` / `keve find gold` | The same for iron (y 16), coal, copper, lapis, gold, redstone and emerald |
+| `keve go mining` | Iron, by default |
+| `... and bring them to me` | Hands over what it found when it's back |
+
+How it mines:
+- **Tools:** it gets wood, makes a wooden pickaxe, digs for stone, makes a stone pickaxe, and later an iron one from iron it mined and smelted itself. A worn-out pickaxe gets replaced on the spot.
+- **Staircase down:** never straight down. After every block it breaks, it looks into the hole. It plugs lava and water with cobblestone and goes around them, and turns away from drops.
+- **Branch mining:** at the ore's level it digs 1x2 tunnels in a back-and-forth pattern. It only takes ores it can **see** (tunnel walls and caves), then follows the vein.
+- **Stopping:** when it has enough, after 20 minutes, when it's hurt or its inventory is full, or when you say `stop`. Then it walks back up its own stairs.
+- **On the way:** it places torches every 8 blocks if it has some, eats, fights what attacks it, and throws away junk stone (andesite, diorite, granite, dirt) when its inventory fills up.
+
+## Crafting
+
+| You type | Keve does |
+| --- | --- |
+| `keve make a stone pickaxe` / `keve craft an iron sword` | Wooden, stone and iron pickaxes, swords, axes and shovels |
+| `keve craft 16 torches` / `keve make a furnace` / `keve make a crafting table` | Torches, furnaces, crafting tables, sticks, planks |
+| `... and bring it to me` | Hands it over when it's made |
+
+It crafts like a player: in its own 2x2 grid, or at a crafting table it puts down and then picks back up. It gathers or mines anything missing first. It smelts iron in a furnace it builds the same way.
+
+## Places
+
+| You type | Keve does |
+| --- | --- |
+| `keve this is home` / `keve set home` | Remembers where you're standing as home |
+| `keve remember this as the mine` | Any name: the mine, the farm, base... |
+| `keve go home` / `keve go to the mine` | Walks there |
+
+Places are saved in `%LOCALAPPDATA%\Keve\memory.json`, so it remembers them next time.
+
+## Playing together
+
+| You type | Keve does |
+| --- | --- |
+| `keve play with me` / `keve be my buddy` / `keve do your own thing` | **Companion mode.** While you move, it keeps up. When you stop to do something, it finds something useful nearby, chosen by Kev from what it can see: ore in sight, a tree when it's low on wood, items on the ground, eating. It fights anything that goes for either of you |
+
+When it finishes a job (handing something over, a gather, a craft, a mining trip), it crouches a few times, like players do to say "done!".
 
 ## Fighting
 
@@ -48,9 +92,9 @@ Keve uses the best weapon it has, and swings on the weapon's real cooldown. **Ba
 
 ## How it decides
 
-1. **Reflexes** (instant, no model): plain `stop`, `follow me`, `come here`, `stay`, `jump`, `look at me` and `help`.
+1. **Reflexes** (instant, no model): plain `stop`, `follow me`, `come here`, `stay`, `jump`, `look at me`, `help`, the place orders (`this is home`, `go home`...) and `play with me`.
 2. **Kev** reads everything else (the decision model, about 0.2 s). It's told what Keve is carrying and doing, and it picks:
-   - what you want: get, get and bring, hand over, follow, come, stay, defend, status, or just talking;
+   - what you want: get, get and bring, hand over, mine, craft, follow, come, stay, defend, status, companion, or just talking;
    - which item you mean.
    So "give me 10 sand" with empty pockets means "go get 10 sand, then bring it". "bring me the sand" while carrying sand means "hand it over". "cut down some trees for me" is wood.
 3. **A check against the inventory** catches the rest. If you ask for items Keve doesn't have, or more than it has, it gets the rest first, then brings them.
@@ -66,3 +110,4 @@ Without Ollama, the keyword rules do steps 1 and 2.
 - **Reach:** it can't mine or hit anything out of reach or behind a block.
 - **Commands:** it can't send `/` commands, or any command that isn't on its whitelist (`companion/ctl.py`).
 - **Where you are:** Keve always knows where you are, as the locator bar shows teammates.
+- **Survival:** it swims up when it's out of air, and steps out of lava or fire.

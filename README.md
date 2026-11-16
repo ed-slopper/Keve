@@ -7,7 +7,7 @@ https://discord.gg/Ad4FXvBSWQ
 
 You type in chat, "keve get 10 wood", "keve mine for diamonds", "keve follow me", "keve defend me", and a second player in your world does it and answers back. Later it will come exploring with you and decide for itself when to fight, mine or help, partly copying what you do.
 
-> **Status: v0, playable.** Keve joins your world and handles chat orders: follow, come, stay, stop, gather wood/dirt/sand/gravel/stone (and bring it to you), give, defend, status and help. Deep mining, crafting and its own free will are next (see [docs/PLAN.md](docs/PLAN.md)).
+> **Status: playable.** Keve joins your world and takes chat orders. It follows and defends you, gathers, hands things over, crafts tools, smelts, mines (all the way to diamonds), remembers places and has a companion mode where it acts on its own. Voice and a better path planner are next (see [docs/PLAN.md](docs/PLAN.md)).
 
 ## Play with Keve (Windows)
 
@@ -21,7 +21,7 @@ You type in chat, "keve get 10 wood", "keve mine for diamonds", "keve follow me"
 2. Starts Ollama, and offers to download the two models if they're missing: Kev-4B (2.5 GB) and Gemma 4 12B (7.6 GB).
 3. **The first time only**, sets up an offline-mode Horizon server in `%LOCALAPPDATA%\Keve\server`. You accept Minecraft's EULA there yourself, and you can pick one of your worlds to copy in (the original isn't touched).
 4. Starts the server in its own window, then starts your Horizon, which joins it by itself.
-5. Starts Keve's game (headless: no window, no GPU) and brings it into the world.
+5. Starts Keve's game (no window, about 300 MB of GPU memory) and brings it into the world.
 6. Runs Keve's brain. Press Ctrl+C in that window to stop Keve; it then asks whether to stop the server too.
 
 Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.md).
@@ -34,14 +34,17 @@ Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Oll
 
 `start_server.bat` and `start_keve.bat` still exist, to run the pieces one at a time. If you play offline in the launcher, you can also use Open to LAN with `start_keve.bat 127.0.0.1:PORT`.
 
+**GPU memory:** Keve's game runs `--offscreen` (no window, small and with a short render distance), using about 300 MB of GPU memory. It needs a renderer because crafting tables and furnaces are menus, and menu clicks only work with one.
+
 **Known limits:**
 - Walking uses Horizon's built-in `goto`, which climbs only 1 block and never digs or bridges. Cliffs and big holes stop it.
-- Mining stone needs a pickaxe in its inventory.
+- Mining is slow: about 8 seconds a stair step, so reaching diamond level takes 10 to 15 minutes.
+- Keve only finds ores it can see, so a trip can come back empty.
 - Handing items over uses only stacks on Keve's hotbar.
 
 ## How it works
 
-- **Game:** [Horizon](https://github.com/horizon-rust/horizon), a from-scratch Rust rewrite of Minecraft Java Edition 26.3. Keve is a real second player in your world: a headless Horizon client, which uses no GPU. It is driven through Horizon's built-in agent control socket (`horizon-ctl`). It uses the game's real physics, so there is none of the rubber-banding of protocol bots such as Mineflayer.
+- **Game:** [Horizon](https://github.com/horizon-rust/horizon), a from-scratch Rust rewrite of Minecraft Java Edition 26.3. Keve is a real second player in your world: a windowless (offscreen) Horizon client. It is driven through Horizon's built-in agent control socket (`horizon-ctl`). It uses the game's real physics, so there is none of the rubber-banding of protocol bots such as Mineflayer.
 - **Three layers:**
   1. **Skills and reflexes** (Rust, deterministic): follow, gather, mine, hunt, defend, give, craft; eat, fight back, get out of lava.
   2. **Nervous system:** [Kev](https://github.com/jaredpalmer/kev), a fast decision model (Kev-4B, Q4_K_M GGUF, through Ollama or llama.cpp) that makes the instant, second-by-second choices.

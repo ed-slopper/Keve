@@ -238,9 +238,12 @@ def ensure_keve_game(ctl_exe, port):
         time.sleep(2)
     (KEVE_HOME / "player").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, HORIZON_HOME=str(KEVE_HOME / "home"))
-    r = subprocess.run([str(ctl_exe), "--socket", str(SOCK), "launch", "--headless",
+    # --offscreen, not --headless: crafting tables and furnaces are menus, and menu clicks
+    # need a renderer. A small window and a short render distance keep it to ~300 MB of VRAM.
+    r = subprocess.run([str(ctl_exe), "--socket", str(SOCK), "launch", "--offscreen",
                         "--server", f"127.0.0.1:{port}", "--name", "Keve",
-                        "--player-dir", str(KEVE_HOME / "player")],
+                        "--player-dir", str(KEVE_HOME / "player"),
+                        "--width", "640", "--height", "360", "--render-distance", "4"],
                        env=env, capture_output=True, text=True, creationflags=NO_WINDOW)
     if '"ok":true' not in r.stdout.replace(" ", ""):
         fail(f"Keve's game didn't start: {(r.stdout + r.stderr).strip()[:400]}")
@@ -282,7 +285,7 @@ def main():
         else:
             print(f"Open Horizon and join 127.0.0.1:{args.port} (Multiplayer, Direct Connection).")
 
-    step("Starting Keve (headless, no window, no GPU)")
+    step("Starting Keve (no window; about 300 MB of GPU memory)")
     ensure_keve_game(ctl_exe, args.port)
 
     step("Keve is in. Type 'keve help' in chat. Press Ctrl+C here to stop Keve.")

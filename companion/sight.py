@@ -8,7 +8,7 @@ import math
 
 # Blocks a ray passes through (you can see past them). Everything else is opaque.
 _SEE_THROUGH = (
-    "glass", "leaves", "water", "short_grass", "tall_grass", "fern", "dead_bush",
+    "glass", "leaves", "minecraft:water", "short_grass", "tall_grass", "fern", "dead_bush",
     "sapling", "flower", "dandelion", "poppy", "orchid", "allium", "azure_bluet",
     "tulip", "oxeye", "cornflower", "lily_of_the_valley", "torchflower", "pitcher",
     "rose_bush", "peony", "lilac", "sunflower", "wildflowers", "bush", "vine", "torch",
@@ -27,6 +27,23 @@ FOV_V = 70.0   # degrees, whole height
 
 def see_through(name):
     return any(s in name for s in _SEE_THROUGH)
+
+
+# See-through is not walk-through: leaves, glass, fences and bars still block a body.
+_SEE_BUT_SOLID = ("glass", "leaves", "pane", "iron_bars", "fence", "lantern", "bamboo",
+                  "cactus", "chain", "barrier", "big_dripleaf", "flower_pot", "candle")
+
+
+def is_fluid(name):
+    """Water or lava itself (not a block with 'waterlogged' in its state)."""
+    return name.split("[", 1)[0] in ("minecraft:water", "minecraft:lava", "minecraft:bubble_column")
+
+
+def blocks_body(name):
+    """Something a player stands on or bumps into (not air, plants, torches or fluids)."""
+    if name is None or name == "minecraft:air" or is_fluid(name):
+        return False
+    return not see_through(name) or any(k in name for k in _SEE_BUT_SOLID)
 
 
 def view_dir(yaw, pitch):

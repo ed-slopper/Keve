@@ -13,8 +13,16 @@ import time
 import traceback
 
 import brain
+import craft
+import life
+import mining
 import skills
 from ctl import Body, Connection, CtlError, Senses
+
+# The skills from the other modules join the registry.
+skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Companion,
+                                           life.SetHome, life.GoPlace)})
+DONE_CROUCH = ("give", "gather", "mine", "craft", "come")  # finished: a little crouch
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -32,6 +40,7 @@ class Keve:
         senses = Senses(self._conns[2])
         self.ctx = skills.Ctx(self.act, senses, self.say, self.owner, self.name)
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None
+        self.ctx.kev = self.kev  # companion mode asks Kev what to do
         self.talk = brain.Talker(args.ollama, args.brain_model, self.name, self.owner)
         self.task = None
         self.task_thread = None
@@ -93,8 +102,14 @@ class Keve:
             except Exception:
                 traceback.print_exc()
                 self.say("my brain glitched, try again")
+            finished = not task.cancelled.is_set() and self.task is task
+            if finished and task.name in DONE_CROUCH:
+                try:
+                    life.crouch(self.ctx)
+                except CtlError:
+                    pass
             # Between orders: stand by and fight back (unless a new order replaced this one).
-            if not task.cancelled.is_set() and task.name not in ("follow", "stay", "idle", "defend")                     and self.task is task:
+            if finished and task.name not in ("follow", "stay", "idle", "defend", "companion"):
                 self.start_task("idle", {})
 
         self.task_thread = threading.Thread(target=run, daemon=True)
