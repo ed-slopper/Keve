@@ -465,22 +465,35 @@ class Give(Task):
         if not o:
             ctx.say("where are you? I can't find you.")
             return
-        r = ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --sprint --timeout 40")
-        if task.done():
-            return
-        if not r.get("arrived") and r.get("distance", 99) > 5:
-            ctx.say("I can't get to you to hand them over.")
-            return
-        # The planner stops a little short; step in the rest of the way so the stack
-        # lands at their feet (a dropped stack flies about a block and a half).
-        for _ in range(10):
+        # Chase them: you keep walking, so re-read where you are every short leg
+        # instead of walking to where you stood when you asked.
+        end = time.time() + 60
+        stuck = 0
+        last_d = None
+        told = False
+        while True:
+            if task.done():
+                return
             o = ctx.owner() or o
             _, _, _, pos = ctx.eye_and_view()
-            if math.dist(pos, o[1]) <= 1.8:
+            d = math.dist(pos, o[1])
+            if d <= 2.4:
                 break
-            ctx.body.call(f"look-at entity {o[0]}")
-            if (ctx.body.call("move forward 0.15").get("moved") or 0) < 0.05:
-                break
+            if time.time() > end or stuck >= 6:
+                ctx.say("I can't catch up with you. stand still a sec?" if not told else
+                        "I can't get to you to hand them over.")
+                if told:
+                    return
+                told, end, stuck = True, time.time() + 20, 0
+                continue
+            if d > 4.0:
+                ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --sprint --timeout 2")
+            else:
+                # Close: step straight in (the planner stops a little short).
+                ctx.body.call(f"look-at entity {o[0]}")
+                ctx.body.call("move forward 0.2 --sprint")
+            stuck = stuck + 1 if last_d is not None and d > last_d - 0.3 else 0
+            last_d = d
         given = 0
         for item in items:
             for _ in range(40):  # one stack per drop
@@ -490,8 +503,22 @@ class Give(Task):
                 if n <= 0:
                     break
                 o = ctx.owner() or o
-                # Aim at their head, so the stack flies to them instead of to Keve's feet.
-                ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 0.9:.2f} {o[1][2]:.2f}")
+                # Measured: from about 2 blocks away, aimed at the feet, a dropped stack
+                # lands within a few tenths of a block of them. Closer than 1.5 and it lands
+                # under both players and Keve picks it back up; farther and it falls short.
+                for _ in range(10):
+                    _, _, _, pos = ctx.eye_and_view()
+                    d = math.dist(pos, o[1])
+                    if 1.5 <= d <= 2.5 or task.done():
+                        break
+                    if d < 1.5:
+                        ctx.body.call(f"look-at entity {o[0]}")
+                        ctx.body.call("move back 0.15")
+                    else:  # they moved off mid hand-over: catch up again
+                        ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} "
+                                      f"--near 2 --sprint --timeout 2")
+                    o = ctx.owner() or o
+                ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 0.1:.2f} {o[1][2]:.2f}")
                 if not ctx.body.call(f"select {item}").get("error"):
                     r = ctx.body.call("drop all")
                     given += (r.get("dropped_from") or {}).get("count", 0)
