@@ -86,6 +86,45 @@ When it finishes a job (handing something over, a gather, a craft, a mining trip
 
 "The chest" is the nearest chest or barrel within 8 blocks of you. Keve has to be able to see it when it walks up.
 
+## Torches
+
+| You type | Keve does |
+| --- | --- |
+| `keve place torches in this room` / `keve light up this cave` / `keve put some torches down` | Lights up the room you're standing in |
+
+How it lights a room:
+- **What counts as the room:** the space you could walk to from where you stand, inside walls, within about 9 blocks.
+- **Where the torches go:** on the floor where they light the most dark spots, until every spot reaches the light level, then it checks again and fills what's still dark.
+- **What it uses:** torches it carries. If it has none, it makes some from coal and sticks.
+- **Your style:** if you've taught it (below), it lights to your level and spaces torches like you do.
+
+## Teaching Keve (watch me)
+
+1. Say `keve watch me place torches`. Anything works after "watch me": `keve watch me build a wall`, `keve watch me dig a doorway`.
+2. Do it. Keve stays near you and watches.
+3. Say `ok did u see` (or `did you see`, `got it?`, `that's it`). You don't need to say "keve" during a lesson.
+
+Keve then says what it saw, e.g. "got it! you placed 3 torch about 6 blocks apart, where it was darker than light 7, 0% on walls. saved as 'place torches'".
+
+| Afterwards you type | Keve does |
+| --- | --- |
+| `keve place torches` | Lights the room your way: your light level and your spacing |
+| `keve copy what i did` / `keve do it like i showed you` | Repeats your last lesson. Torches light the room you're in; a build is placed the same way around where you stand now |
+| `keve place torches` (the lesson's name) | A saved lesson's name works as an order too |
+
+**Fair:** Keve only learns what it saw happen, close enough to have been you.
+
+**Training data:** every lesson is appended to `%LOCALAPPDATA%\Keve\training\demos.jsonl`, one JSON object per line. Each holds:
+- what you called it;
+- every block you placed or broke: its type, position and position relative to you, the light level before, and floor or wall;
+- the path you walked.
+
+These lessons are the dataset for teaching Keve's models later (see the README).
+
+**Known limits:**
+- A build is copied facing the same direction as when you showed it; it isn't turned to match where you face now.
+- Keve needs the same blocks in its inventory to copy a build.
+
 ## Several things at once
 
 Chain orders with **then**, **after that**, **and then** or **first … then**:

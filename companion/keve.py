@@ -14,6 +14,7 @@ import traceback
 
 import brain
 import containers
+import teach
 import craft
 import life
 import mining
@@ -24,8 +25,10 @@ from ctl import Body, Connection, CtlError, Senses
 # The skills from the other modules join the registry.
 skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Companion,
                                            life.SetHome, life.GoPlace, life.Sequence,
-                                           containers.TakeFromChest, containers.PutInChest)})
-DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence")
+                                           containers.TakeFromChest, containers.PutInChest,
+                                           teach.Watch, teach.LightUp, teach.Replay)})
+DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
+               "light_up", "replay", "watch")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -209,8 +212,21 @@ class Keve:
         low = text.lower().strip()
         named = self.addressed_by_name(low)
         recent = time.time() - self.last_said < 20
+        if self.task and self.task.name == "watch":
+            recent = True  # a lesson is on: everything you say is to Keve
         # Nervous system, part 1: instant reflexes (stop, follow, come...), no model.
         route = brain.reflex_route(low) if (named or recent) else None
+        watching = self.task if (self.task and self.task.name == "watch") else None
+        if watching and (route is None or route[0] == "watch_done") and \
+                (route or re.search(r"\b(see|seen|saw|done|got it)\b", low)):
+            watching.seen_it.set()  # "ok did u see": the lesson is over
+            return
+        if route and route[0] == "watch_done":
+            route = None  # not watching: it's just talk
+        if route is None and (named or recent):
+            demo = teach.find_demo(re.sub(r"^\W*(keve|kev)\b\W*", "", low))
+            if demo:
+                route = ("replay", {"demo": demo})
         decision = None
         if route is None and self.kev:
             # Part 2: Kev reads the message knowing what Keve carries and is doing.

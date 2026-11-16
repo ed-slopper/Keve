@@ -96,6 +96,14 @@ Keve picks a setup by your graphics card's memory (VRAM). About 3 GB is kept for
 - Mining is slow: about 8 seconds a stair step, so reaching diamond level takes 10 to 15 minutes.
 - Keve only finds ores it can see, so a trip can come back empty.
 
+## Teaching Keve
+
+Say `keve watch me place torches`, do it, then say `ok did u see`. Keve tells you what it saw and saves the lesson. It then does that job your way (`keve place torches`, `keve copy what i did`). Details are in [COMMANDS.md](COMMANDS.md#teaching-keve-watch-me).
+
+Lessons are saved as training data in `%LOCALAPPDATA%\Keve\training\demos.jsonl`, one JSON object per line: what you called it, every block placed or broken (position, relative position, light before, floor or wall), and your path.
+
+**Next idea:** use the lessons as fine-tuning examples. Each one becomes "situation → what you did" pairs for Kev, so it learns to pick your actions in new places, not just repeat a build. Today the lessons are used directly: torch lessons set the light level and spacing, and builds are replayed.
+
 ## How it works
 
 - **Game:** [Horizon](https://github.com/horizon-rust/horizon), a from-scratch Rust rewrite of Minecraft Java Edition 26.3. Keve is a real second player in your world: a windowless (offscreen) Horizon client. It is driven through Horizon's built-in agent control socket (`horizon-ctl`). It uses the game's real physics, so there is none of the rubber-banding of protocol bots such as Mineflayer.

@@ -41,7 +41,7 @@ def is_fluid(name):
 
 def blocks_body(name):
     """Something a player stands on or bumps into (not air, plants, torches or fluids)."""
-    if name is None or name == "minecraft:air" or is_fluid(name):
+    if not name or name == "minecraft:air" or is_fluid(name):
         return False
     return not see_through(name) or any(k in name for k in _SEE_BUT_SOLID)
 

@@ -22,7 +22,7 @@ BODY_ALLOWED = {
     "chat", "respawn", "menu", "key",
 }
 # Raw sensors: X-ray if used directly, so only the sight module gets them.
-SENSES_ALLOWED = {"blocks", "entities"}
+SENSES_ALLOWED = {"blocks", "entities", "light"}
 
 
 class CtlError(Exception):

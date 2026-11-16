@@ -154,6 +154,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "light_up": "Place torches to light up a room, a cave or an area",
         "talk": "Not an order: chatting, joking or asking a question",
     }
     ITEMS = {
@@ -217,6 +218,13 @@ class Kev:
 
 # Orders the nervous system answers instantly, with no model call (stop must never wait).
 REFLEX_RULES = [
+    (r"\b(did (you|u|ya) see( that| it| me)?|got (it|that)\??$|that'?s (it|how)( you do it)?|"
+     r"ok(ay)? (done|that'?s it)|you see( that)?\??$|see that\??$)", "watch_done"),
+    (r"\b(watch|look at|observe|study|learn from) (me|this|what i do|how i)\b", "watch"),
+    (r"\b(place|put|stick|add|set) (some |the |a few |more )?torch|\blight (it |this |the |my |our )?"
+     r"(up|room|area|cave|place|house|base|mine)\b|\blight up\b", "light_up"),
+    (r"\b(do (it|that|the same)( again| here| like i (showed|did))?|copy (me|that|what i did)|"
+     r"repeat (that|it|what i did)|like i showed you|what i showed you)\b", "replay"),
     (r"\b(stop|cancel|halt|nevermind|never mind|freeze)\b", "stop"),
     (r"\b(help|commands|what can you do)\b", "help"),
     (r"^\W*(keve|kev)?\W*(follow( me)?|let'?s go)\W*$", "follow"),
@@ -238,6 +246,10 @@ def reflex_route(text):
         m = re.search(pattern, text)
         if not m:
             continue
+        if skill == "watch":
+            what = text[m.end():].strip(" ,.!?")
+            what = re.sub(r"^(do|how to|how i|while i|as i|i)\s+", "", what).strip()
+            return "watch", {"what": what or "this"}
         if skill == "set_place":
             return "set_home", {"name": m.group(4).strip()}
         if skill == "set_home":
@@ -335,7 +347,7 @@ def plan(decision, text, have):
     # so its top pick is trusted unless it is "talk" or barely above chance.
     if task in (None, "talk") or decision["confidence"] < 0.1:
         return None
-    if task in ("follow", "come", "stay", "defend", "stop", "status", "help", "companion"):
+    if task in ("follow", "come", "stay", "defend", "stop", "status", "help", "companion", "light_up"):
         return task, {}
     ore = find_ore(text)
     craftable = find_craftable(text)
@@ -442,6 +454,8 @@ ACKS = {
     "give": ["coming over", "here, catch"],
     "help": [""],
     "take": ["checking the chest", "on it"],
+    "light_up": ["on it, lighting it up", "torches coming up"],
+    "replay": ["ok, like you showed me", "copying you"],
     "put": ["putting stuff away", "ok, into the chest"],
     "sequence": ["ok: {steps}", "got it: {steps}"],
     "mine": ["going mining for {ore}", "{ore}, here I come", "ok, digging for {ore}"],
