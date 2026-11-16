@@ -8,10 +8,10 @@ In game, type **`keve help`** for this list. Typing `/help keve` won't work: com
 
 | You type | Keve does |
 | --- | --- |
-| `keve follow me` | Follows you, stays 3 to 4 blocks behind and eats when hungry |
+| `keve follow me` | Follows you, 3 to 4 blocks behind, eats when hungry, and **fights mobs it sees going for you** |
 | `keve come here` | Walks or sprints to where you are |
-| `keve stay` / `keve wait here` | Stops and waits |
-| `keve stop` | Stops whatever it's doing |
+| `keve stay` / `keve wait here` | Stops and waits (still hits back at mobs right next to it) |
+| `keve stop` | Stops whatever it's doing. Between orders it stands by and fights back |
 | `keve look at me` | Turns to face you |
 | `keve jump` | Jumps |
 
@@ -21,17 +21,22 @@ In game, type **`keve help`** for this list. Typing `/help keve` won't work: com
 | --- | --- |
 | `keve get 10 wood` / `keve chop some trees` | Looks around, walks to trees it can see, chops the logs and picks them up |
 | `keve grab 5 dirt`, `keve collect sand`, `keve get 8 gravel` | The same for dirt, sand and gravel |
+| `keve get some sugar cane`, `keve get 3 pumpkins`, `keve get clay` | Sugar cane, pumpkins and clay too |
 | `keve mine 20 stone` | Cobblestone (needs a pickaxe in its inventory) |
 | `... and bring them to me` | When it's done, walks to you and drops them at you. Works with any of the above, e.g. `keve mine 10 sand and drop them to me` |
-| `keve give me your sand` / `keve give me everything` | Hands over what it's carrying |
+| `keve bring me the sand` / `keve give me your logs` / `keve bring them to me` | Hands over what it **already has**: the named item, or whatever it gathered last |
+| `keve give me everything` | Hands over its whole inventory |
+| `keve bring me 5 sand` / `keve bring me some sand` | With an amount, it gets new ones first, then brings them |
 
-Numbers can be words: "a few", "some", "ten", "a stack". With no number it gets 10.
+Numbers can be words: "a few", "some", "ten", "a stack". With no number it gets 10. Ask for something it can't get yet ("get me diamonds") and it says so, instead of guessing.
 
 ## Fighting
 
 | You type | Keve does |
 | --- | --- |
-| `keve defend me` / `keve protect me` / `keve guard` | Fights hostile mobs it can see within 12 blocks of you (best weapon first, waits for the attack cooldown), then comes back to you |
+| `keve defend me` / `keve protect me` / `keve guard` | Fights hostile mobs it can see within 12 blocks of you, or right next to itself, then comes back to you |
+
+Keve uses the best weapon it has, and swings on the weapon's real cooldown. **Barehanded it does 1 damage a hit, so a zombie takes it about 20 seconds; give it a sword.**
 
 ## Other
 

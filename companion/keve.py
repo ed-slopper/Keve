@@ -71,14 +71,16 @@ class Keve:
             self.ctrl.call("stop")
         except CtlError:
             pass
-        if self.task_thread and self.task_thread.is_alive():
+        if self.task_thread and self.task_thread.is_alive()                 and self.task_thread is not threading.current_thread():
             self.task_thread.join(timeout=5)
         self.task = None
 
     def start_task(self, skill, args):
         self.stop_task()
+        if skill == "cant":
+            skill, args = "idle", {}
         if skill == "stop":
-            return
+            skill, args = "idle", {}  # stop the job, but still fight back between orders
         task = skills.SKILLS[skill](self.ctx, **args)
         self.task = task
 
@@ -91,6 +93,9 @@ class Keve:
             except Exception:
                 traceback.print_exc()
                 self.say("my brain glitched, try again")
+            # Between orders: stand by and fight back (unless a new order replaced this one).
+            if not task.cancelled.is_set() and task.name not in ("follow", "stay", "idle", "defend")                     and self.task is task:
+                self.start_task("idle", {})
 
         self.task_thread = threading.Thread(target=run, daemon=True)
         self.task_thread.start()
@@ -127,9 +132,12 @@ class Keve:
             skill = decision["task"]
             args = {}
             if skill == "gather":
-                args = brain.parse_gather("get " + low) or {"item": "wood", "count": 10}
+                args = brain.parse_gather("get " + low) or {"unknown": "that"}
+                if "unknown" in args:
+                    skill = "cant"
             elif skill == "give":
-                args = brain.parse_give(low) or {"item": None}
+                args = {"item": brain.find_item(low),
+                        "everything": bool(re.search(r"(everything|all)", low))}
             route = (skill, args)
         if route is None:
             # Just talking: let the brain answer.
@@ -143,7 +151,8 @@ class Keve:
         print(f"[keve] {speaker}: {text!r} -> {skill} {args}")
         ack = random.choice(brain.ACKS.get(skill, [""]))
         if ack:
-            self.say(ack.format(**args) if args else ack)
+            shown = {k: (v.replace("_", " ") if isinstance(v, str) else v) for k, v in args.items()}
+            self.say(ack.format(**shown) if args else ack)
         self.start_task(skill, args)
 
     def run(self):
@@ -161,6 +170,7 @@ class Keve:
             print("[keve] start_keve.bat 127.0.0.1:25565")
             return
         last = self.ctrl.call("events --limit 1").get("last", 0)
+        self.start_task("idle", {})  # stand by and fight back until the first order
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
         print("[keve] say '{0} follow me', '{0} get 10 wood', '{0} defend me', '{0} stop' in chat"
               .format(self.name.lower()))

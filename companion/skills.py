@@ -31,6 +31,9 @@ GATHER = {
                lambda i: i in ("minecraft:gravel", "minecraft:flint")),
     "stone": (lambda b: base(b) in ("minecraft:stone", "minecraft:cobblestone"),
               lambda i: i == "minecraft:cobblestone"),
+    "sugar_cane": (lambda b: base(b) == "minecraft:sugar_cane", lambda i: i == "minecraft:sugar_cane"),
+    "pumpkin": (lambda b: base(b) == "minecraft:pumpkin", lambda i: i == "minecraft:pumpkin"),
+    "clay": (lambda b: base(b) == "minecraft:clay", lambda i: i == "minecraft:clay_ball"),
 }
 NEEDS_PICKAXE = {"stone"}
 
@@ -64,6 +67,7 @@ class Ctx:
         self.memory = {}          # (x, y, z) -> (block name, time seen); filled only by sight
         self.bad_targets = {}     # (x, y, z) -> failures
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
+        self.last_item = None     # what it gathered last ("bring them to me")
 
     # --- own state -------------------------------------------------------------------
     def state(self):
@@ -81,6 +85,15 @@ class Ctx:
         for n in short_names:
             if counts.get("minecraft:" + n, 0) > 0:
                 return n
+        return None
+
+    def slot_of(self, item):
+        """The inventory slot id (0-35) holding `item`, or None."""
+        inv = self.body.call("inventory")
+        for s in inv.get("hotbar", []) + inv.get("main", []):
+            it = s.get("item")
+            if it and it.get("item") == item:
+                return s["slot"]
         return None
 
     def select_best(self, short_names):
@@ -186,21 +199,33 @@ class Ctx:
         """Walk up to a mob and hit it (respecting the attack cooldown) until it's gone."""
         end = time.time() + timeout
         last = None
+        held = (self.state().get("held") or {}).get("item", "") or ""
+        # Ticks until a full-strength hit again (vanilla attack speed): fists 4/s,
+        # swords 1.6/s, axes about 0.8-1/s, anything else 4/s like a fist.
+        cooldown = 13 if held.endswith("_sword") else 22 if held.endswith("_axe") else 5
+        stalled = 0
         while time.time() < end and not (task is not None and task.done()):
-            ents = self.senses.call("entities 48").get("entities", [])
+            ents = self.senses.call("entities 24").get("entities", [])
             mob = next((e for e in ents if e["id"] == mob_id), None)
             if mob is None or (mob.get("health") is not None and mob["health"] <= 0):
                 break
             last = mob
             x, y, z = mob["pos"]
-            if mob["distance"] > 2.5:
-                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 1.5 --sprint --timeout 3")
+            d = mob["distance"]
+            if d > 7.0:
+                # Far: let the path planner get close (a short leg; the mob moves).
+                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 2.5 --sprint --timeout 1.5")
                 continue
             self.body.call(f"look-at entity {mob_id}")
+            if d > 2.9:
+                # Close: run straight at it, a few ticks at a time, jumping over bumps.
+                r = self.body.call(f"move forward 0.25 --sprint{' --jump' if stalled > 1 else ''}")
+                stalled = 0 if (r.get("moved") or 0) > 0.15 else stalled + 1
+                continue
             if not self.body.call(f"attack {mob_id}").get("error"):
-                self.body.call("wait 12")  # a sword recharges in about 12 ticks
+                self.body.call(f"wait {cooldown}")
             else:
-                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.8 --timeout 2")
+                self.body.call("move forward 0.15")
         if last:  # walk over the drops
             x, y, z = last["pos"]
             self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.5 --timeout 4")
@@ -232,6 +257,25 @@ class Task:
     def done(self):
         return self.cancelled.is_set()
 
+    def guard(self, owner_radius=10.0, self_radius=5.0):
+        """Reflex: fight a hostile it can see that is close to the owner or to Keve.
+        True when it fought something (the caller then loops again)."""
+        ctx = self.ctx
+        o = ctx.owner()
+        _, _, _, pos = ctx.eye_and_view()
+        targets = ctx.visible_hostiles(pos, self_radius)
+        if o:
+            targets += ctx.visible_hostiles(o[1], owner_radius)
+        if not targets:
+            return False
+        m = min(targets, key=lambda m: m["distance"])
+        if not getattr(self, "_announced", False):
+            ctx.say(random.choice(["got one!", "behind you!", "I see it!", "on it!"]))
+            self._announced = True
+        ctx.select_best(WEAPONS)
+        ctx.hunt(m["id"], 10.0, self)
+        return True
+
 
 class Come(Task):
     name = "come"
@@ -258,6 +302,10 @@ class Follow(Task):
         stuck = 0
         last_eat = 0.0
         while not self.done():
+            # A friend who follows you also fights what's attacking you.
+            if self.guard():
+                continue
+            self._announced = False
             o = self.ctx.owner()
             if not o:
                 time.sleep(1.0)
@@ -286,8 +334,20 @@ class Stay(Task):
 
     def run(self):
         self.ctx.body.call("stop")
+        home = self.ctx.eye_and_view()[3]
         while not self.done():
+            # Stays put, but doesn't stand there and take hits.
+            if self.guard(owner_radius=0.0, self_radius=4.0):
+                p = home
+                self.ctx.body.call(f"goto {p[0]:.2f} {p[1]:.2f} {p[2]:.2f} --near 1 --timeout 6")
+                continue
+            self._announced = False
             time.sleep(0.5)
+
+
+class Idle(Stay):
+    """What Keve does between orders: stand by and fight back."""
+    name = "idle"
 
 
 class Gather(Task):
@@ -298,6 +358,7 @@ class Gather(Task):
         want = int(self.args.get("count", 10))
         block_ok, item_ok = GATHER[what]
         ctx = self.ctx
+        shown = what.replace("_", " ")
 
         def have():
             return sum(n for i, n in ctx.counts().items() if item_ok(i))
@@ -305,7 +366,7 @@ class Gather(Task):
         start = have()
         goal = start + want
         if what in NEEDS_PICKAXE and not ctx.has(PICKAXES):
-            ctx.say(f"I need a pickaxe for {what}.")
+            ctx.say(f"I need a pickaxe for {shown}.")
             return
         explores = 0
         breaks = 0
@@ -313,8 +374,12 @@ class Gather(Task):
         # landed out of reach): a few spare blocks, then pick up what's around and stop.
         max_breaks = want + max(3, want // 3)
         while not self.done():
+            # Don't keep digging while something is eating it.
+            if self.guard(owner_radius=0.0, self_radius=4.0):
+                continue
             got = have()
             if got >= goal or breaks >= max_breaks:
+                ctx.last_item = what
                 for _ in range(2):
                     time.sleep(0.7)
                     ctx.collect(10, self)
@@ -322,9 +387,9 @@ class Gather(Task):
                     if got >= goal:
                         break
                 if got - start >= want:
-                    ctx.say(f"got {got - start} {what}!")
+                    ctx.say(f"got {got - start} {shown}!")
                 else:
-                    ctx.say(f"mined {breaks} but only picked up {got - start} {what}, some drops got away.")
+                    ctx.say(f"mined {breaks} but only picked up {got - start} {shown}, some drops got away.")
                 if self.args.get("give"):
                     Give(ctx, item=what).run_inner(self)
                 return
@@ -335,7 +400,7 @@ class Gather(Task):
             if not targets:
                 if not ctx.look_around(block_ok):
                     if explores >= 6:
-                        ctx.say(f"I can't find any {what} around here.")
+                        ctx.say(f"I can't find any {shown} I can see around here.")
                         return
                     explores += 1
                     ang = random.uniform(0, 2 * math.pi)
@@ -389,6 +454,8 @@ class Give(Task):
     def run_inner(self, task):
         ctx = self.ctx
         what = self.args.get("item")  # a GATHER word, or None for everything
+        if what is None and not self.args.get("everything") and ctx.last_item:
+            what = ctx.last_item  # "bring them to me": what it just gathered
         item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
         items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
         if not items:
@@ -415,16 +482,25 @@ class Give(Task):
                 o = ctx.owner() or o
                 # Aim at their head, so the stack flies to them instead of to Keve's feet.
                 ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 1.5:.2f} {o[1][2]:.2f}")
-                if ctx.body.call(f"select {item}").get("error"):
-                    break  # not on the hotbar (main inventory): leave it for now
-                r = ctx.body.call("drop all")
-                given += (r.get("dropped_from") or {}).get("count", 0)
+                if not ctx.body.call(f"select {item}").get("error"):
+                    r = ctx.body.call("drop all")
+                    given += (r.get("dropped_from") or {}).get("count", 0)
+                else:
+                    # Not on the hotbar: open the inventory, pick the stack up and close it.
+                    # A stack still held on the cursor when the screen closes is thrown.
+                    slot = ctx.slot_of(item)
+                    if slot is None:
+                        break
+                    ctx.body.call("open-inventory")
+                    ctx.body.call(f"click-slot {slot}")
+                    ctx.body.call("close")
+                    given += n - ctx.counts().get(item, 0)
                 time.sleep(0.2)
         if given:
             # Step back: a dropped stack can be picked up again after 2 s, by anyone close.
             ctx.body.call("move back 0.8")
-        ctx.say(f"here you go: {given} {what or 'items'}." if given else
-                "couldn't hand them over (they're not on my hotbar).")
+        ctx.say(f"here you go: {given} {(what or 'items').replace('_', ' ')}." if given else
+                "couldn't hand them over.")
 
 
 class Defend(Task):
@@ -433,17 +509,12 @@ class Defend(Task):
     def run(self):
         ctx = self.ctx
         while not self.done():
+            if self.guard(owner_radius=12.0, self_radius=5.0):
+                continue
+            self._announced = False
             o = ctx.owner()
             if not o:
                 time.sleep(1.0)
-                continue
-            mobs = ctx.visible_hostiles(o[1], 12.0)
-            if mobs:
-                m = mobs[0]
-                ctx.select_best(WEAPONS)
-                ctx.hunt(m["id"], 12.0, self)
-                if self.done():
-                    return
                 continue
             _, _, _, pos = ctx.eye_and_view()
             if math.dist(pos, o[1]) > 6:
@@ -498,4 +569,4 @@ HELP_LINES = [
     "or just talk to me.",
 ]
 
-SKILLS = {c.name: c for c in (Come, Follow, Stay, Gather, Give, Defend, Status, Jump, LookAtMe, Help)}
+SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Defend, Status, Jump, LookAtMe, Help)}
