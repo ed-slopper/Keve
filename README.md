@@ -28,6 +28,8 @@ Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.
 
 Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--owner NAME`, `--port N`.
 
+**A new world:** `Keve.bat --new-world 2024` swaps the server's world for a new one from seed 2024, which starts in a forest (oak and birch). Without a seed it's random. The old world is kept as `world-backup-<date>` in `%LOCALAPPDATA%\Keve\server`. To bring a backup back, stop the server, then rename that folder to `world`.
+
 **Why a server and not Open to LAN?** When you're signed in with a Microsoft account, a LAN world runs in online mode, and Horizon refuses Keve at login, because Keve has no account. The offline-mode server lets both of you in. Offline mode means anyone who can reach the port can join under any name, so keep it on your own PC or LAN; don't forward the port.
 
 `start_server.bat` and `start_keve.bat` still exist, to run the pieces one at a time. If you play offline in the launcher, you can also use Open to LAN with `start_keve.bat 127.0.0.1:PORT`.

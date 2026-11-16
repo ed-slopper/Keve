@@ -149,11 +149,13 @@ def ensure_server(srv, port):
         step("First run: setting up an offline-mode Horizon server for you and Keve")
         print("Horizon asks you to accept Minecraft's EULA (https://aka.ms/MinecraftEULA).")
         SERVER_DIR.mkdir(parents=True, exist_ok=True)
+        seed = ["--seed", SEED_FOR_INIT[0]] if SEED_FOR_INIT[0] else []
         r = subprocess.run([str(srv), "--dir", str(SERVER_DIR), "init", "--world", "world",
-                            "--port", str(port), "--no-whitelist", "--offline"])
+                            "--port", str(port), "--no-whitelist", "--offline", *seed])
         if r.returncode != 0 or not (SERVER_DIR / "server.toml").exists():
             fail("the server setup didn't finish")
-        pick_world()
+        if not SEED_FOR_INIT[0]:
+            pick_world()
     step(f"Starting the server (its own window) on port {port}")
     proc = subprocess.Popen([str(srv), "--dir", str(SERVER_DIR), "run"], creationflags=NEW_CONSOLE)
     wait_for(lambda: port_open(port), 180, "the server")
@@ -179,6 +181,35 @@ def pick_world():
             shutil.rmtree(dest)
         shutil.copytree(worlds[choice - 1], dest, ignore=shutil.ignore_patterns("session.lock"))
         print(f"Copied {worlds[choice - 1].name}.")
+
+
+def new_world(srv, port, seed):
+    """Swap the server's world for a fresh one; the old one is moved aside, not deleted."""
+    toml = SERVER_DIR / "server.toml"
+    if not toml.exists():
+        print("The server isn't set up yet; it's set up first, with this seed.")
+    step(f"New world{' with seed ' + seed if seed else ' (random seed)'}")
+    if port_open(port):
+        print("Stopping the server (it saves the world first)...")
+        subprocess.run([str(srv), "--dir", str(SERVER_DIR), "stop"])
+        wait_for(lambda: not port_open(port), 60, "the server stopping")
+    world = SERVER_DIR / "world"
+    if world.exists():
+        backup = SERVER_DIR / f"world-backup-{time.strftime('%Y%m%d-%H%M%S')}"
+        world.rename(backup)
+        print(f"The old world is kept in {backup}")
+    if toml.exists():
+        text = toml.read_text(encoding="utf-8")
+        import re
+        text, n = re.subn(r'(?m)^seed\s*=\s*"[^"]*"', f'seed = "{seed}"', text, count=1)
+        if n == 0:
+            text = text.replace("[world]\n", f'[world]\nseed = "{seed}"\n', 1)
+        toml.write_text(text, encoding="utf-8")
+    else:
+        SEED_FOR_INIT[0] = seed
+
+
+SEED_FOR_INIT = [""]
 
 
 # --- Keve's headless game ---------------------------------------------------------------
@@ -222,6 +253,9 @@ def main():
     p.add_argument("--port", type=int, default=25565)
     p.add_argument("--no-game", action="store_true", help="don't start your Horizon (it's already open)")
     p.add_argument("--no-llm", action="store_true", help="no Ollama: plain orders only")
+    p.add_argument("--new-world", nargs="?", const="", metavar="SEED",
+                   help="replace the server's world with a new one (the old one is kept in a backup "
+                        "folder); SEED is optional, e.g. 2024 starts in a forest")
     args = p.parse_args()
     KEVE_HOME.mkdir(parents=True, exist_ok=True)
 
@@ -233,6 +267,9 @@ def main():
     step("Models")
     kev, brain_model = ensure_ollama(args)
     print(f"Kev: {kev or 'off'}; chat: {brain_model or 'off'}")
+
+    if args.new_world is not None:
+        new_world(srv, args.port, args.new_world)
 
     server_proc = ensure_server(srv, args.port)
 
