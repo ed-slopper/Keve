@@ -80,6 +80,9 @@ class Provision:
 
     def get_raw(self, what, n, depth):
         ctx = self.ctx
+        if getattr(self, "only_inventory", False):
+            self.missing = (what, n)
+            return False
         if what == "log":
             ctx.say(f"need wood first, getting {n + 1} logs")
             self.sub(Gather, item="wood", count=n + 1)
@@ -175,6 +178,17 @@ class Craft(Task):
         if item not in craft.RECIPES:
             self.ctx.say(f"I don't know how to make {shown} yet.")
             return
+        if self.args.get("from_chest"):
+            import containers
+            containers.take_for_recipe(self.ctx, self, item)
+            prov.only_inventory = True  # "from the chest": don't go gathering instead
+            if self.args.get("count_auto"):
+                # No number given: as many as the chest's things make (up to 64).
+                makes = craft.RECIPES[item][2]
+                n = 64
+                while n > makes and prov.crafter.raw_needs(item, n):
+                    n -= makes
+                count = n
         try:
             ok = prov.ensure(item, prov.crafter.count(item) + count if item in craft.INGREDIENTS else count)
         except RuntimeError as e:
@@ -185,8 +199,13 @@ class Craft(Task):
             if self.args.get("give"):
                 Give(self.ctx, item=None, items=[item]).run_inner(self)
         elif not self.done():
-            need = "iron" if item.startswith("iron_") else "the stuff"
-            self.ctx.say(f"couldn't make {shown}, I need {need} for it.")
+            missing = getattr(prov, "missing", None)
+            if missing:
+                self.ctx.say(f"not enough in there for {shown}: I'm short {missing[1]} "
+                             f"{missing[0].replace('_', ' ')}.")
+            else:
+                need = "iron" if item.startswith("iron_") else "the stuff"
+                self.ctx.say(f"couldn't make {shown}, I need {need} for it.")
 
 
 class Mine(Task):

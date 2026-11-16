@@ -83,6 +83,21 @@ def horizon_tools():
 
 
 # --- your name ------------------------------------------------------------------------
+def owner_account():
+    """The launcher's selected account: (name, uuid), or (None, None)."""
+    if not LAUNCHER.exists():
+        return None, None
+    try:
+        out = subprocess.run([str(LAUNCHER), "account", "list", "--json"], capture_output=True,
+                             text=True, timeout=30, creationflags=NO_WINDOW).stdout
+        for a in json.loads(out).get("accounts", []):
+            if a.get("selected"):
+                return a["name"], a.get("uuid")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return None, None
+
+
 def owner_name(args):
     if args.owner:
         return args.owner
@@ -185,8 +200,118 @@ def _try(f):
         return False
 
 
+# --- Keve wears your skin: forwarding through a small proxy (skinproxy.py) -------------
+SECRET = SERVER_DIR / "forwarding.secret"
+SECRET_OFF = SERVER_DIR / "forwarding.secret.off"
+PROXY_PID = KEVE_HOME / "skinproxy.pid"
+SKINS = KEVE_HOME / "skins.json"
+
+
+def toml_port():
+    import re
+    m = re.search(r"(?m)^port\s*=\s*(\d+)", (SERVER_DIR / "server.toml").read_text(encoding="utf-8"))
+    return int(m.group(1)) if m else None
+
+
+def set_toml_port(port):
+    import re
+    t = (SERVER_DIR / "server.toml").read_text(encoding="utf-8")
+    t = re.sub(r"(?m)^port\s*=\s*\d+", f"port = {port}", t, count=1)
+    (SERVER_DIR / "server.toml").write_text(t, encoding="utf-8")
+
+
+def stop_server(srv, port):
+    subprocess.run([str(srv), "--dir", str(SERVER_DIR), "stop"], creationflags=NO_WINDOW)
+    end = time.time() + 60
+    while port_open(port) and time.time() < end:
+        time.sleep(1)
+
+
+def configure_forwarding(srv, public, skin):
+    """Skin on: the server listens on public+1 and trusts the proxy on `public`.
+    Skin off: the server is on `public` again and takes direct joins."""
+    if not (SERVER_DIR / "server.toml").exists():
+        return
+    want_port = public + 1 if skin else public
+    want_secret = skin
+    have_secret = SECRET.exists()
+    if toml_port() == want_port and have_secret == want_secret:
+        return
+    step("Setting the server up for Keve's skin" if skin else "Turning Keve's skin forwarding off")
+    running = [p for p in (toml_port(), public, public + 1) if p and port_open(p)]
+    if running:
+        print("Restarting the server once for this (it saves the world first)...")
+        stop_proxy()
+        for p in running:
+            stop_server(srv, p)
+    if want_secret and not have_secret:
+        if SECRET_OFF.exists():
+            SECRET_OFF.rename(SECRET)
+        else:
+            import secrets
+            SECRET.write_text(secrets.token_hex(24), encoding="utf-8")
+    if not want_secret and have_secret:
+        SECRET.replace(SECRET_OFF)
+    set_toml_port(want_port)
+
+
+def proxy_alive():
+    try:
+        pid = int(PROXY_PID.read_text())
+    except (OSError, ValueError):
+        return False
+    out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True,
+                         creationflags=NO_WINDOW).stdout
+    return str(pid) in out
+
+
+def stop_proxy():
+    if proxy_alive():
+        subprocess.run(["taskkill", "/PID", PROXY_PID.read_text().strip(), "/F"],
+                       capture_output=True, creationflags=NO_WINDOW)
+    PROXY_PID.unlink(missing_ok=True)
+
+
+def ensure_proxy(public, owner, owner_uuid):
+    """Start the skin proxy (its own background process, so it outlives this window)."""
+    import skinproxy
+    skins = {}
+    if owner_uuid:
+        try:
+            prop = skinproxy.fetch_textures(owner_uuid, KEVE_HOME / "skin_cache.json")
+            if prop:
+                skins = {"keve": prop, owner.lower(): prop}
+        except OSError as e:
+            print(f"Couldn't fetch your skin from Mojang ({e}); Keve keeps the default one.")
+    SKINS.write_text(json.dumps(skins), encoding="utf-8")
+    if proxy_alive() and port_open(public):
+        stop_proxy()  # restart it, so it reads today's skin
+    flags = NO_WINDOW | getattr(subprocess, "DETACHED_PROCESS", 0)
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    exe = str(pythonw if pythonw.exists() else sys.executable)
+    proc = subprocess.Popen([exe, str(HERE / "skinproxy.py"), str(public), str(public + 1),
+                             str(SECRET), str(SKINS)], creationflags=flags,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    PROXY_PID.write_text(str(proc.pid))
+    wait_for(lambda: port_open(public), 15, "the skin proxy")
+    print(f"Keve wears your skin. You both join 127.0.0.1:{public}.")
+
+
+def robot_head(ctl_exe, srv, block):
+    """Keve's robot head: a block on its head (set by the server console, like an admin would)."""
+    if not block or block == "none":
+        return
+    inv = ctl(ctl_exe, "inventory", timeout=10)
+    head = next((a for a in inv.get("armor", []) if a.get("part") == "head"), {})
+    if head.get("item"):
+        return
+    subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd",
+                    f"item replace entity Keve armor.head with minecraft:{block}"],
+                   capture_output=True, creationflags=NO_WINDOW)
+
+
 # --- the server -------------------------------------------------------------------------
-def ensure_server(srv, port):
+def ensure_server(srv, port, skin=False):
     if port_open(port):
         print(f"A server is already up on port {port}.")
         return None
@@ -201,6 +326,9 @@ def ensure_server(srv, port):
             fail("the server setup didn't finish")
         if not SEED_FOR_INIT[0]:
             pick_world()
+        if skin and not SECRET.exists():
+            import secrets
+            SECRET.write_text(secrets.token_hex(24), encoding="utf-8")
     step(f"Starting the server (its own window) on port {port}")
     proc = subprocess.Popen([str(srv), "--dir", str(SERVER_DIR), "run"], creationflags=NEW_CONSOLE)
     wait_for(lambda: port_open(port), 180, "the server")
@@ -351,6 +479,9 @@ def main():
     p.add_argument("--no-llm", action="store_true", help="no Ollama: plain orders only")
     p.add_argument("--profile", help="use this GPU profile from profiles.json (cpu, 4gb ... 128gb)")
     p.add_argument("--no-voice", action="store_true", help="no talking or listening")
+    p.add_argument("--no-skin", action="store_true", help="Keve keeps the default skin (no skin proxy)")
+    p.add_argument("--robot-head", default="observer",
+                   help="the block Keve wears as a robot head (observer, dispenser, ... or none)")
     p.add_argument("--setup-voice", action="store_true", help="install the better voice for your profile")
     p.add_argument("--new-world", nargs="?", const="", metavar="SEED",
                    help="replace the server's world with a new one (the old one is kept in a backup "
@@ -382,10 +513,20 @@ def main():
         print(f"Voice: using Windows speech for now ({ears} ears, {mouth} voice). "
               f"For the better voice this profile can run, use Keve.bat --setup-voice once.")
 
+    skin = not args.no_skin
+    owner_uuid = owner_account()[1] if skin else None
+    if skin and not owner_uuid:
+        print("No signed-in launcher account to take a skin from: Keve keeps the default skin.")
+    server_port = args.port + 1 if skin else args.port
     if args.new_world is not None:
-        new_world(srv, args.port, args.new_world)
+        new_world(srv, server_port, args.new_world)
+        if not port_open(server_port):
+            stop_proxy()
+    configure_forwarding(srv, args.port, skin)
 
-    server_proc = ensure_server(srv, args.port)
+    server_proc = ensure_server(srv, server_port, skin)
+    if skin:
+        ensure_proxy(args.port, owner, owner_uuid)
 
     if not args.no_game:
         step("Starting your Horizon")
@@ -398,6 +539,7 @@ def main():
 
     step("Starting Keve (no window; about 300 MB of GPU memory)")
     ensure_keve_game(ctl_exe, args.port)
+    robot_head(ctl_exe, srv, args.robot_head)
 
     step("Keve is in. Type 'keve help' in chat. Press Ctrl+C here to stop Keve.")
     import keve
@@ -418,6 +560,9 @@ def main():
         if server_proc and server_proc.poll() is None:
             if ask("Stop the server too (saves the world)?"):
                 subprocess.run([str(srv), "--dir", str(SERVER_DIR), "stop"])
+                stop_proxy()
+            elif skin:
+                print("The server and Keve's skin proxy keep running; you can keep playing.")
 
 
 if __name__ == "__main__":

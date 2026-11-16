@@ -29,6 +29,18 @@ Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.
 
 Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--no-voice`, `--setup-voice`, `--profile NAME`, `--owner NAME`, `--port N`.
 
+## Keve's look
+
+Keve wears **your skin** with a **robot head** (an observer block worn on its head).
+
+- **How it gets your skin:** in offline mode a server sends no skins, and games only show skin images that Mojang hosts. So `Keve.bat` runs a small proxy in front of the server (`companion/skinproxy.py`), using Horizon's Velocity-style forwarding. When Keve joins, the proxy hands the server **your** skin data (Mojang-signed, from your profile), and every game draws Keve in your skin.
+- **What changes:** you and Keve join `127.0.0.1:25565` (the proxy), and the server moves to 25566.
+- **A custom painted skin isn't possible.** Games only show skins Mojang hosts, and Keve has no Minecraft account to upload one to.
+- **Choosing the head:** `--robot-head dispenser` for another block, `--robot-head none` for no head.
+- **Turning it off:** `--no-skin` puts the server back to taking direct joins on 25565.
+- **The proxy outlives Keve:** it runs in the background, so you can keep playing after stopping Keve. Answering "yes" to "Stop the server too?" stops it as well.
+- **The separate scripts:** while skin forwarding is on, the server refuses direct joins, so `start_server.bat` and `start_keve.bat` only work after `Keve.bat --no-skin`.
+
 ## Talking to Keve
 
 Say it out loud: **"Keve, follow me"**, **"Keve, get me ten wood and bring it to me"**, **"Keve, mine for diamonds"**. Every order in [COMMANDS.md](COMMANDS.md) works by voice too, and Keve says out loud what it says in chat. Start with "Keve". For about 20 seconds after Keve speaks, you can answer without its name.

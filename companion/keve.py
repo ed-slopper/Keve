@@ -13,6 +13,7 @@ import time
 import traceback
 
 import brain
+import containers
 import craft
 import life
 import mining
@@ -22,8 +23,9 @@ from ctl import Body, Connection, CtlError, Senses
 
 # The skills from the other modules join the registry.
 skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Companion,
-                                           life.SetHome, life.GoPlace)})
-DONE_CROUCH = ("give", "gather", "mine", "craft", "come")  # finished: a little crouch
+                                           life.SetHome, life.GoPlace, life.Sequence,
+                                           containers.TakeFromChest, containers.PutInChest)})
+DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -144,6 +146,36 @@ class Keve:
         self.task_thread.start()
 
     # --- chat handling -------------------------------------------------------------
+    def plan_steps(self, speaker, steps):
+        """Several orders in one message: each step read on its own (reflexes, then Kev),
+        run one after another."""
+        out = []
+        for st in steps:
+            r = brain.reflex_route(st)
+            if r is None and self.kev:
+                d = self.kev.decide(speaker, "keve " + st, self.name, self.situation())
+                if d:
+                    r = brain.plan(d, st, self.have)
+            if r is None:
+                r = brain.rule_route(st)
+            if r is None or r[0] in ("cant", "stop", "help"):
+                continue
+            out.append(r)
+        if len(out) < 2:
+            return out[0] if out else None
+        words = {"gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+                 "come": "come back", "follow": "follow you", "give": "bring it over",
+                 "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
+                 "defend": "guard you", "set_home": "remember this spot", "stay": "wait"}
+        said = []
+        for skill, args in out:
+            shown = {k: (v.replace("_", " ") if isinstance(v, str) else v) for k, v in args.items()}
+            try:
+                said.append(words.get(skill, skill).format(**shown))
+            except (KeyError, IndexError):
+                said.append(skill)
+        return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
     def have(self, item_word):
         """How many of a gather word (wood, sand...) Keve carries."""
         ok = skills.GATHER.get(item_word, (None, lambda i: False))[1]
@@ -187,6 +219,9 @@ class Keve:
                 print(f"[kev] {decision}")
         if not (named or recent or (decision and decision["addressed"] >= 0.7)):
             return
+        steps = brain.split_steps(low) if (named or recent) else []
+        if len(steps) > 1:
+            route = self.plan_steps(speaker, steps) or route
         if route is None and decision:
             route = brain.plan(decision, low, self.have)
             if route is None and decision["task"] not in (None, "talk"):
@@ -215,7 +250,14 @@ class Keve:
         ack = random.choice(brain.ACKS.get(skill, [""]))
         if ack:
             shown = {k: (v.replace("_", " ") if isinstance(v, str) else v) for k, v in args.items()}
-            self.say(ack.format(**shown) if args else ack)
+            if skill == "sequence":
+                shown["steps"] = args.get("steps_text", "")
+            try:
+                self.say(ack.format(**shown) if args else ack)
+            except (KeyError, IndexError):
+                self.say(ack.split("{")[0].strip() or "ok")
+        if skill == "sequence":
+            args = {"steps": args["steps"]}
         self.start_task(skill, args)
 
     def run(self):

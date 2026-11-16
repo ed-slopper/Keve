@@ -76,6 +76,26 @@ Places are saved in `%LOCALAPPDATA%\Keve\memory.json`, so it remembers them next
 
 When it finishes a job (handing something over, a gather, a craft, a mining trip), it crouches a few times, like players do to say "done!".
 
+## Chests
+
+| You type | Keve does |
+| --- | --- |
+| `keve craft me torches from the chest next to me` / `keve make a stone pickaxe from the stuff in the chest` | Goes to the chest by you, takes only what the recipe can use (coal, sticks, planks, logs...), and crafts. With no number, it makes as many as the chest's things allow. If the chest is short, it says what's missing instead of going off to gather |
+| `keve get the coal from the chest` / `keve take 10 logs out of the chest and bring them to me` | Takes that item (or everything, if you don't name one) |
+| `keve put your stuff in the chest` / `keve put the cobblestone in the chest` | Stores that item, or everything except its tools, torches and food |
+
+"The chest" is the nearest chest or barrel within 8 blocks of you. Keve has to be able to see it when it walks up.
+
+## Several things at once
+
+Chain orders with **then**, **after that**, **and then** or **first … then**:
+
+- `keve chop 10 wood then make a crafting table and then come back`
+- `keve mine for iron then make an iron pickaxe then go home`
+- `keve first get 5 dirt, then follow me`
+
+Keve reads each step on its own (reflexes, then Kev, then the inventory check), says the plan back ("ok: get 10 wood, then make crafting table, then come back"), and does the steps in order. It says "all done!" at the end. If one step fails, it moves on to the next. `keve stop` cancels the rest.
+
 ## Fighting
 
 | You type | Keve does |

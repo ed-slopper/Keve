@@ -210,3 +210,26 @@ def crouch(ctx, times=3):
         ctx.body.call("wait 3")
         ctx.body.call("key shift up")
         ctx.body.call("wait 3")
+
+
+class Sequence(Task):
+    """Several orders in a row ('chop 10 wood, then make a table, then come back')."""
+    name = "sequence"
+
+    def run(self):
+        import skills
+        steps = self.args.get("steps", [])
+        for i, (skill, args) in enumerate(steps):
+            if self.done():
+                return
+            cls = skills.SKILLS.get(skill)
+            if cls is None or skill in ("stop", "idle"):
+                continue
+            t = cls(self.ctx, **args)
+            t.cancelled = self.cancelled
+            try:
+                t.run()
+            except Exception as e:  # one step going wrong doesn't end the plan
+                self.ctx.say(f"step {i + 1} went wrong ({e}), moving on.")
+        if not self.done() and len(steps) > 1:
+            self.ctx.say("all done!")

@@ -103,6 +103,9 @@ def rule_route(text):
     if HAND_OVER.search(text) and not NEW_AMOUNT.search(text) and not has_gather_verb:
         return "give", {"item": find_item(text),
                         "everything": bool(re.search(r"\b(everything|all)\b", text))}
+    chest = route_chest(text)
+    if chest:
+        return chest
     ore = find_ore(text)
     if ore and re.search(r"\b(mine|get|find|dig|look for|go for|bring)\b", text):
         return "mine", {"ore": ore, "count": parse_count(text) or (3 if ore == "diamond" else 8),
@@ -288,10 +291,45 @@ def parse_count(text):
     return None
 
 
+def route_chest(text):
+    """Orders about a chest or barrel: take from it, put into it, craft from it."""
+    if not re.search(r"\b(chests?|barrels?)\b", text):
+        return None
+    give = bool(GIVE_BACK.search(text))
+    count = parse_count(text)
+    word = find_item(text) or find_ore(text) or find_craftable(text)
+    craftable = find_craftable(text)
+    if craftable and re.search(r"\b(make|craft|build)\b", text):
+        return "craft", {"item": craftable, "count": count or 1, "give": give, "from_chest": True,
+                         "count_auto": count is None}
+    if re.search(r"\b(put|store|stash|deposit|dump|empty|unload)\b", text):
+        everything = re.search(r"\b(everything|all|your stuff|your things|inventory)\b", text)
+        return "put", {"item": None if everything else word}
+    if re.search(r"\b(take|get|grab|bring|fetch|give)\b", text):
+        return "take", {"item": word, "count": count, "give": give or bool(re.search(r"\bbring\b", text))}
+    return None
+
+
+STEP_SPLIT = re.compile(r"\s*(?:,?\s*\band then\b|,?\s*\bthen\b|,?\s*\bafter that\b|"
+                        r",?\s*\bafterwards\b|,?\s*\band also\b|;)\s*")
+
+
+def split_steps(text):
+    """'chop 10 wood then make a crafting table and then come back' -> three steps."""
+    t = re.sub(r"^\W*(keve|kev)\b\W*", "", text)
+    t = re.sub(r"^(first|1st)\b\W*", "", t)
+    parts = [p.strip(" ,.") for p in STEP_SPLIT.split(t)]
+    parts = [re.sub(r"^(and|also|next|finally)\b\W*", "", p) for p in parts]
+    return [p for p in parts if len(p.split()) >= 1 and p not in ("", "and")]
+
+
 def plan(decision, text, have):
     """Turn Kev's reading of a message into a skill, checked against what Keve carries.
 
     `have(item_word)` -> how many Keve has. Returns (skill, args) or None (just talk)."""
+    chest = route_chest(text)
+    if chest:
+        return chest
     task = decision["task"]
     # Kev's confidence runs low even when its pick is right (0.2-0.3 on clear orders),
     # so its top pick is trusted unless it is "talk" or barely above chance.
@@ -403,6 +441,9 @@ ACKS = {
     "gather": ["on it, getting {count} {item}", "{count} {item} coming up", "ok, {count} {item}"],
     "give": ["coming over", "here, catch"],
     "help": [""],
+    "take": ["checking the chest", "on it"],
+    "put": ["putting stuff away", "ok, into the chest"],
+    "sequence": ["ok: {steps}", "got it: {steps}"],
     "mine": ["going mining for {ore}", "{ore}, here I come", "ok, digging for {ore}"],
     "craft": ["making {item}", "one {item} coming up", "crafting {item}"],
     "companion": ["let's go, I'll do my own thing and keep up", "alright, partners", "lead on, I've got ideas too"],

@@ -160,7 +160,12 @@ class Crafter:
                 if self.task.done():
                     return
                 self._fill(pattern, grid)
-                result = self.slots().get(200)
+                result = None
+                for _ in range(8):  # the result slot fills a tick or two after the grid
+                    result = self.slots().get(200)
+                    if result:
+                        break
+                    time.sleep(0.06)
                 if not result:
                     raise RuntimeError(f"the {item} recipe didn't show a result")
                 self.click(200, shift=True)

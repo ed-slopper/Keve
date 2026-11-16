@@ -685,6 +685,8 @@ HELP_LINES = [
     "mine for diamonds / get me 10 iron / go mine some coal (I make my own pickaxes)",
     "make a stone pickaxe / craft 16 torches / make a furnace",
     "defend me / this is home / go home / remember this as the mine / go to the mine",
+    "craft torches from the chest / get the coal from the chest / put your stuff in the chest",
+    "chain orders: get 10 wood then make a crafting table then come back",
     "give me your sand / give me everything / what you got / or just talk to me.",
 ]
 
