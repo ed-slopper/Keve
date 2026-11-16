@@ -101,6 +101,9 @@ def rule_route(text):
     if re.search(r"\b(help|commands|what can you do|what do you do)\b", text):
         return "help", {}
     has_gather_verb = re.search(r"\b(get|collect|gather|grab|mine|chop|fetch|dig)\b", text)
+    named = route_give_item(text)  # "give me the stone pickaxe": that item, not "stone"
+    if named:
+        return named
     if HAND_OVER.search(text) and not NEW_AMOUNT.search(text) and not has_gather_verb:
         return "give", {"item": find_item(text),
                         "everything": bool(re.search(r"\b(everything|all)\b", text))}
@@ -110,6 +113,9 @@ def rule_route(text):
     hunt = route_hunt(text)
     if hunt:
         return hunt
+    given = route_give_item(text)
+    if given:
+        return given
     block = route_block(text)
     if block:
         return block
@@ -334,6 +340,27 @@ def route_hunt(text):
     return None
 
 
+def route_give_item(text):
+    """'give me a stone pickaxe' / 'bring me a furnace': that item, got first if needed."""
+    if not re.search(r"\b(give|bring|hand|toss)\b", text):
+        return None
+    if re.search(r"\b(everything|all)\b", text):
+        return None
+    import world_names
+    names = world_names.names()
+    if names is None:
+        return None
+    item, label = names.item_in(text)
+    if not item:
+        return None
+    # A plain gather word ("wood", "sand") or an ore: those routes know them. A longer
+    # name ("stone pickaxe", "crafting table") is a particular item.
+    if len(label.split()) < 2 and (find_item(text) or find_ore(text)):
+        return None
+    n = parse_count(text) if re.search(r"[0-9]|\b(two|three|four|five|six|seven|eight|nine|ten)\b", text) else None
+    return "give", {"items": [item], "count": n or 1}
+
+
 def route_block(text):
     """Any block by name: 'mine this coal', 'break that glass', 'open the door',
     'pull the lever', 'place a crafting table', 'get me 10 andesite'."""
@@ -411,6 +438,9 @@ def plan(decision, text, have):
     hunt = route_hunt(text)
     if hunt:
         return hunt
+    given = route_give_item(text)
+    if given:
+        return given
     block = route_block(text)
     if block:
         return block

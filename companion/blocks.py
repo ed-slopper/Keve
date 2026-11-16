@@ -144,8 +144,9 @@ class PlaceBlock(Task):
         item = self.args["item"]
         label = self.args.get("label", item.removeprefix("minecraft:").replace("_", " "))
         if not ctx.counts().get(item):
-            ctx.say(f"I don't have any {label}.")
-            return
+            import mining
+            if not mining.Provision(ctx, self).obtain(item, 1):
+                return
         o = ctx.owner()
         if o and math.dist(ctx.eye_and_view()[3], o[1]) > 3:
             ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --timeout 15")

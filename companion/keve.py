@@ -341,6 +341,11 @@ class Keve:
                             self.handle_chat(m.group(1), m.group(2))
                         except Exception:
                             traceback.print_exc()
+                elif kind == "hurt":
+                    try:
+                        self.ctx.on_hurt(ev)
+                    except CtlError:
+                        pass
                 elif kind == "death":
                     self.stop_task()
                     try:

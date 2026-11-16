@@ -37,7 +37,7 @@
     "hunt": ["sorry little buddy, it's dinner time!", "the hunt begins!", "for the food chain!"],
     "break": ["SMASH!", "that {label} doesn't stand a chance!", "{label}, meet my fist of fury!"],
     "use_block": ["click!", "allow me!"],
-    "place_block": ["one {label}, placed with LOVE!", "behold, a {label}!"],
+    "place_block": ["one {label}, coming right up!", "a {label}? you got it, buddy!"],
     "status": [""], "help": [""], "look": [""], "look_around": [""],
     "cant": ["{unknown}? I don't know that one yet, buddy! I can do wood, dirt, sand, gravel, stone, ores and crafting!"]
   },

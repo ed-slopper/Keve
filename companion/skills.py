@@ -40,11 +40,15 @@ NEEDS_PICKAXE = {"stone"}
 
 HOSTILE = {
     "zombie", "husk", "drowned", "zombie_villager", "skeleton", "stray", "bogged", "creeper",
-    "spider", "cave_spider", "witch", "slime", "phantom", "pillager", "vindicator", "evoker",
+    "cave_spider", "witch", "slime", "phantom", "pillager", "vindicator", "evoker",
     "ravager", "vex", "silverfish", "endermite", "blaze", "ghast", "magma_cube",
     "piglin_brute", "hoglin", "zoglin", "wither_skeleton", "guardian", "elder_guardian",
     "breeze", "creaking", "parched",
 }
+# Leave these alone unless they're after you: spiders are calm in the light, the rest only
+# fight back when provoked (or, for spiders, in the dark: night or a cave).
+NEUTRAL = {"spider", "enderman", "zombified_piglin", "piglin", "wolf", "bee", "iron_golem",
+           "polar_bear", "llama", "trader_llama", "panda", "dolphin", "goat"}
 WEAPONS = ["netherite_sword", "diamond_sword", "iron_sword", "netherite_axe", "diamond_axe",
            "stone_sword", "iron_axe", "golden_sword", "wooden_sword", "stone_axe", "golden_axe",
            "wooden_axe"]
@@ -69,6 +73,7 @@ class Ctx:
         self.bad_targets = {}     # (x, y, z) -> failures
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
         self.last_item = None     # what it gathered last ("bring them to me")
+        self.provoked = {}        # mob type -> when it last hurt Keve or you
 
     # --- own state -------------------------------------------------------------------
     def state(self):
@@ -194,10 +199,57 @@ class Ctx:
             return "gone"
         return "visible" if snap.block_visible(eye, pos) else "hidden"
 
+    def is_dark_at(self, pos):
+        """Too dark for a spider to stay calm: night with no lamp, or a cave."""
+        x, y, z = (int(math.floor(v)) for v in pos)
+        r = self.senses.call(f"light {x} {y} {z} {x} {y + 1} {z}")
+        block = max((int(c, 16) for c in r.get("block", "") if c != "."), default=0)
+        sky = max((int(c, 16) for c in r.get("sky", "") if c != "."), default=0)
+        try:
+            t = self.body.call("status").get("day_time", 6000) % 24000
+        except Exception:
+            t = 6000
+        sun = sky if t < 12500 or t > 23500 else max(0, sky - 11)
+        return max(block, sun) < 7
+
+    def wants_a_fight(self, m):
+        """Is this mob actually after someone? Hostiles always; neutral ones only when
+        provoked, a spider also in the dark."""
+        kind = m.get("type", "").removeprefix("minecraft:")
+        if kind in HOSTILE:
+            return True
+        if kind not in NEUTRAL:
+            return False
+        if time.time() - self.provoked.get(kind, 0) < 60:
+            return True
+        return kind == "spider" and self.is_dark_at(tuple(m["pos"]))
+
+    def on_hurt(self, event):
+        """Keve got hurt: remember who did it (neutral mobs fight back when provoked)."""
+        text = str(event).lower()
+        for kind in NEUTRAL | HOSTILE:
+            if kind in text:
+                self.provoked[kind] = time.time()
+                return
+        # The event didn't say who: the nearest mob next to Keve did it.
+        near = [e for e in self.senses.call("entities 4").get("entities", [])
+                if e.get("kind") == "mob" and e.get("type") != "minecraft:player"]
+        if near:
+            kind = min(near, key=lambda e: e["distance"])["type"].removeprefix("minecraft:")
+            self.provoked[kind] = time.time()
+
     def visible_hostiles(self, around, radius):
         eye, yaw, pitch, _ = self.eye_and_view()
         mobs = self.senses.call(f"entities {radius + 16:.0f}").get("entities", [])
-        mobs = [m for m in mobs if m.get("type", "").removeprefix("minecraft:") in HOSTILE]
+        mobs = [m for m in mobs if m.get("type", "").removeprefix("minecraft:") in HOSTILE | NEUTRAL]
+        # You just got hit (your hurt time is up) by a neutral mob close to you: it's provoked.
+        owner = next((e for e in self.senses.call(f"entities {radius + 16:.0f} minecraft:player")
+                      .get("entities", []) if e.get("hurt_time", 0) > 0), None) if self.owner_name else None
+        if owner:
+            for m in mobs:
+                if math.dist(tuple(m["pos"]), tuple(owner["pos"])) < 3.5:
+                    self.provoked[m["type"].removeprefix("minecraft:")] = time.time()
+        mobs = [m for m in mobs if self.wants_a_fight(m)]
         if not mobs:
             return []
         snap = sight.Snapshot.read(self.senses, eye)
@@ -492,7 +544,14 @@ class Gather(Task):
         # Never mine much more than asked, even when drops go missing (fell in a hole,
         # landed out of reach): a few spare blocks, then pick up what's around and stop.
         max_breaks = want + max(3, want // 3)
+        deadline = time.time() + float(self.args.get("max_seconds", 180 + 20 * want))
         while not self.done():
+            if time.time() > deadline:
+                got = have() - start
+                if not self.args.get("quiet_fail"):
+                    ctx.say(f"I could only get {got} {shown}, the rest is out of reach." if got else
+                            f"I can't reach any {shown} from here.")
+                return
             # Don't keep digging while something is eating it.
             if self.guard(owner_radius=0.0, self_radius=4.0):
                 continue
@@ -530,9 +589,12 @@ class Gather(Task):
             # Lowest first (tree trunks from the bottom), then nearest.
             t = min(targets, key=lambda p: (math.dist(p, pos) // 4, p[1], math.dist(p, pos)))
             if math.dist((t[0] + 0.5, t[1] + 0.5, t[2] + 0.5), pos) > 4.0:
-                ctx.body.call(f"goto {t[0] + 0.5:.1f} {t[1]:.1f} {t[2] + 0.5:.1f} --near 3 --timeout 20")
+                r = ctx.body.call(f"goto {t[0] + 0.5:.1f} {t[1]:.1f} {t[2] + 0.5:.1f} --near 3 --timeout 20")
                 if self.done():
                     return
+                if not r.get("arrived") and r.get("distance", 99) > 4.5:
+                    ctx.bad_targets[t] = 2  # no way to it: don't keep trying this one
+                    continue
             seen = ctx.still_there_and_visible(t, block_ok)
             if seen == "gone":
                 continue
@@ -661,6 +723,11 @@ class Give(Task):
                 what = ctx.last_item  # "bring them to me": what it just gathered
             item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
         items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
+        if not items and exact and len(exact) == 1:
+            # "give me a stone pickaxe" with none on hand: get one first, then hand it over.
+            import mining
+            if mining.Provision(ctx, task).obtain(next(iter(ids)), int(self.args.get("count", 1))):
+                items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
         if not items:
             ctx.say(f"I don't have any {what or 'items'}.")
             return

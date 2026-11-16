@@ -124,6 +124,62 @@ class Provision:
                     return False
         return False
 
+    # --- getting any item, thinking it through out loud ----------------------------------
+    def recipe_text(self, item):
+        """'crafting table = 4 planks', 'stone pickaxe = 3 cobblestone + 2 sticks'."""
+        size, pattern, makes = craft.RECIPES[item]
+        parts = {}
+        for ing in pattern.values():
+            parts[ing] = parts.get(ing, 0) + 1
+        words = {"cobble": "cobblestone", "planks": "planks", "stick": "sticks", "log": "logs",
+                 "coal": "coal", "iron_ingot": "iron ingots"}
+        made = f"{makes} " if makes > 1 else ""
+        need = " + ".join(f"{n} {words.get(i, i.replace('_', ' '))}" for i, n in parts.items())
+        table = ", at a crafting table" if size == 3 else ""
+        return f"{made}{item.replace('_', ' ')} = {need}{table}"
+
+    def obtain(self, item_id, count=1, talk=True):
+        """Have `count` of any item: from the inventory, else by crafting it (its recipe,
+        then what's missing, then where to get that), else by breaking that block.
+        Says the plan as it goes. True when Keve has them."""
+        ctx = self.ctx
+        short = item_id.removeprefix("minecraft:")
+        have = ctx.counts().get("minecraft:" + short, 0)
+        if have >= count:
+            return True
+        if short in craft.RECIPES:
+            if talk:
+                missing = self.crafter.raw_needs(short, count - have)
+                plan = self.recipe_text(short)
+                if missing:
+                    words = {"log": "logs", "cobble": "cobblestone", "coal": "coal",
+                             "iron_ingot": "iron ingots", "raw_iron": "raw iron"}
+                    gets = ", ".join(f"{n} {words.get(k, k.replace('_', ' '))}" for k, n in missing.items())
+                    ctx.say(f"no {short.replace('_', ' ')} on me. {plan}. I'm missing {gets}, getting that first.")
+                else:
+                    ctx.say(f"no {short.replace('_', ' ')} on me, but I've got the stuff: {plan}. crafting!")
+            try:
+                ok = self.ensure(short, count)
+            except RuntimeError as e:
+                ctx.say(f"couldn't craft it: {e}")
+                return False
+            return ok and ctx.counts().get("minecraft:" + short, 0) >= count
+        import world_names
+        names = world_names.names()
+        if names and item_id in names.blocks:
+            # A block you get by breaking one (dirt, glass needs silk touch: it may drop nothing).
+            if talk:
+                ctx.say(f"no {short.replace('_', ' ')} on me, I'll go break some.")
+            import blocks
+            t = blocks.BreakBlocks(ctx, ids=[item_id], label=short.replace("_", " "),
+                                   count=count - have, near_owner=False)
+            t.cancelled = self.task.cancelled
+            t.run()
+            return ctx.counts().get("minecraft:" + short, 0) >= count
+        if talk:
+            ctx.say(f"I don't know how to get {short.replace('_', ' ')} yet.")
+        return False
+
     def ensure_pickaxe(self, tier):
         """A pickaxe good enough for `tier` (0 wooden, 1 stone, 2 iron)."""
         if self.pick_tier() >= tier:
