@@ -7,7 +7,45 @@ https://discord.gg/Ad4FXvBSWQ
 
 You type in chat, "keve get 10 wood", "keve mine for diamonds", "keve follow me", "keve defend me", and a second player in your world does it and answers back. Later it will come exploring with you and decide for itself when to fight, mine or help, partly copying what you do.
 
-> **Status: planning.** There's no code yet. This repo holds the design and a script that tests the decision model.
+> **Status: v0, playable.** Keve joins your world and handles chat orders: come, follow, stay, stop, status, jump, "get N wood/dirt/sand/gravel/stone" and defend. Deep mining, crafting and its own free will are next (see [docs/PLAN.md](docs/PLAN.md)).
+
+## Play with Keve (v0, Windows)
+
+**You need:**
+- [Horizon](https://playhorizon.dev/download), installed with its launcher.
+- Python 3.11 or newer.
+- [Ollama](https://ollama.com) with these models:
+
+```bash
+ollama pull hf.co/turintech/Kev-4B-Artemis-GGUF:Q4_K_M
+```
+```bash
+ollama pull huihui_ai/gemma-4-abliterated:12b
+```
+
+Gemma is only used for chat replies. Kev understands orders worded in unusual ways. Without Ollama, Keve still follows the plain orders.
+
+**Steps:**
+1. Start Horizon and open a world. Then press Esc, choose **Open to LAN** and **Start LAN World**, and note the port that appears in chat.
+2. Run `start_keve.bat`. Type the port when asked, or pass it directly with your name: `start_keve.bat 127.0.0.1:PORT YourName`. Keve's game runs headless (no window, no GPU) and joins your world as the player "Keve".
+3. Type in chat:
+
+| You type | Keve does |
+| --- | --- |
+| `keve follow me` / `keve come here` / `keve stay` / `keve stop` | Follows you / walks to you / waits / stops |
+| `keve get 10 wood`, `keve grab 5 dirt`, `keve collect sand` | Looks around, walks to what it can *see*, mines it, picks it up |
+| `keve defend me` | Kills hostile mobs it can see within 12 blocks of you |
+| `keve what you got` | Says its health, food and items |
+| anything else with "keve" in it | Answers in chat (Gemma) |
+
+**Signed-in accounts:** if the launcher is signed in to a Microsoft account, your LAN world runs in online mode, which can refuse Keve, because Keve joins as an offline player. If Keve can't join, play with an offline account in the launcher for now. Another option is to host the world with `horizon-server init --offline`, then `horizon-server run`, and have both of you join `127.0.0.1`.
+
+**Fair play:** Keve only knows the blocks and mobs it can see (ray cast from its eyes, in its field of view), and only sends whitelisted commands (`companion/ctl.py`). One exception for now: it always knows where you are, as the locator bar shows teammates.
+
+**Known limits in v0:**
+- Walking uses Horizon's built-in `goto`, which climbs only 1 block and never digs or bridges. Cliffs and big holes stop it.
+- Mining stone needs a pickaxe in its inventory.
+- `defend` hasn't been tested against real mobs yet.
 
 ## How it works
 
