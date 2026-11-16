@@ -262,7 +262,8 @@ class Voice:
     """Ears and a mouth with a queue, so speaking never blocks the game loop."""
 
     def __init__(self, ears="windows", mouth="windows", on_heard=None, whisper_model="small.en",
-                 whisper_device="auto", kokoro_voice="am_adam", windows_voice="Microsoft David Desktop"):
+                 whisper_device="auto", kokoro_voice="am_adam", windows_voice="Microsoft David Desktop",
+                 kokoro_speed=1.1, windows_rate=1):
         self.on_heard = on_heard or (lambda text: None)
         self.speaking_until = 0.0
         self.q = queue.Queue()
@@ -270,12 +271,12 @@ class Voice:
         self.mouth_name = mouth
         if mouth == "kokoro":
             try:
-                self.mouth = KokoroMouth(kokoro_voice)
+                self.mouth = KokoroMouth(kokoro_voice, kokoro_speed)
             except Exception as e:
                 print(f"[voice] Kokoro unavailable ({e}); using the Windows voice")
                 self.mouth_name = "windows"
         if self.mouth is None and mouth != "off":
-            self.mouth = WindowsMouth(windows_voice)
+            self.mouth = WindowsMouth(windows_voice, windows_rate)
             self.mouth_name = "windows"
         if self.mouth:
             threading.Thread(target=self._speak_loop, daemon=True).start()

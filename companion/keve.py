@@ -59,9 +59,13 @@ class Keve:
         self.voice = None
         ears, mouth = getattr(args, "ears", "off"), getattr(args, "mouth", "off")
         if ears != "off" or mouth != "off":
+            pv = brain.PERSONALITY.get("voice", {})
             self.voice = voice_mod.Voice(ears=ears, mouth=mouth, on_heard=self.on_voice,
                                          whisper_model=getattr(args, "whisper", "small.en"),
-                                         whisper_device=getattr(args, "whisper_device", "cpu"))
+                                         whisper_device=getattr(args, "whisper_device", "cpu"),
+                                         kokoro_voice=pv.get("kokoro", "am_adam"),
+                                         kokoro_speed=float(pv.get("speed", 1.1)),
+                                         windows_rate=int(pv.get("windows_rate", 1)))
             print(f"[voice] ears: {self.voice.ears_name}, voice: {self.voice.mouth_name}")
 
     def close(self):
@@ -266,8 +270,7 @@ class Keve:
             if self.talk.ok:
                 self.say_later(speaker, text)
             else:
-                self.say(random.choice(["huh?", "say that again?", "I only know follow, come, stay, "
-                                        "stop, defend, status and 'get N wood'"]))
+                self.say(brain.line("confused", "huh? say that again?"))
             return
         skill, args = route
         print(f"[keve] {speaker}: {text!r} -> {skill} {args}")
@@ -300,6 +303,9 @@ class Keve:
             return
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
+        hello = brain.line("hello")
+        if hello:
+            self.say(hello)
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
         print("[keve] say '{0} follow me', '{0} get 10 wood', '{0} defend me', '{0} stop' in chat"
               .format(self.name.lower()))
@@ -326,7 +332,7 @@ class Keve:
                         self.ctrl.call("respawn")
                     except CtlError:
                         pass
-                    self.say("I died... ugh. respawning.")
+                    self.say(brain.line("died", "I died... ugh. respawning."))
             last = max(last, r.get("last", last))
             time.sleep(0.25)
 

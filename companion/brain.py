@@ -6,6 +6,7 @@ steers the body.
 """
 import json
 import re
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -465,15 +466,32 @@ def find_unknown(text):
     return " ".join(words[:3]) or None
 
 
-PERSONA = (
+PERSONA_FILE = Path(__file__).resolve().parent.parent / "persona.json"
+
+
+def load_persona():
+    try:
+        return json.loads(PERSONA_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+PERSONALITY = load_persona()
+ABILITIES = (" You can: follow, come, stay, gather and mine any block, go mining for ores (coal, iron, "
+             "gold, diamonds...), craft tools and torches, smelt iron, hunt animals, defend from mobs, "
+             "use chests, doors and levers, light up rooms, learn by watching, remember places like home, "
+             "and play alongside them on your own. Don't claim to do anything else.")
+PERSONA = (" ".join(PERSONALITY.get("style", [])) or (
     "You are {name}, a player in a Minecraft survival world, playing alongside {owner}. "
-    "You are a cocky, funny, loyal friend who teases {owner} but always has their back. "
-    "You are not an assistant: talk like a gamer in chat, short and casual, no emojis, "
-    "no markdown, one or two short sentences, under 200 characters. "
-    "You can: follow, come, stay, gather wood/dirt/sand/gravel/stone/sugar cane, mine for ores "
-    "(coal, iron, gold, diamonds...), craft tools and torches, smelt iron, defend from mobs, "
-    "remember places like home, and play alongside them on your own. Don't claim to do anything else."
-)
+    "You are a cocky, funny, loyal friend. Talk like a gamer in chat, short and casual, no emojis, "
+    "no markdown, one or two short sentences, under 200 characters.")) + ABILITIES
+
+
+def line(kind, default=""):
+    """One of the persona's lines ('hello', 'died', 'done', 'confused'), at random."""
+    import random
+    options = PERSONALITY.get("lines", {}).get(kind) or ([default] if default else [])
+    return random.choice(options) if options else ""
 
 
 class Talker:
@@ -502,7 +520,7 @@ class Talker:
         try:
             r = _post(self.url, {"model": self.model, "messages": msgs, "stream": False,
                                  "keep_alive": "30m", "think": False,
-                                 "options": {"num_predict": 80, "temperature": 0.9, "num_ctx": getattr(self, "ctx_tokens", 4096)}},
+                                 "options": {"num_predict": 90, "temperature": 1.0, "num_ctx": getattr(self, "ctx_tokens", 4096)}},
                       timeout=90)
         except (urllib.error.URLError, OSError, ValueError) as e:
             print(f"[talk] unavailable ({e})")
@@ -544,5 +562,10 @@ ACKS = {
     "look": [""],
     "status": [""],
 }
+
+# The persona's own replies replace the plain ones, order by order.
+for _k, _v in PERSONALITY.get("acks", {}).items():
+    if _v:
+        ACKS[_k] = _v
 
 assert set(GATHER) >= set(WORDS_TO_ITEM.values())

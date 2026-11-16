@@ -41,6 +41,15 @@ Keve wears **your skin** with a **robot head** (an observer block worn on its he
 - **The proxy outlives Keve:** it runs in the background, so you can keep playing after stopping Keve. Answering "yes" to "Stop the server too?" stops it as well.
 - **The separate scripts:** while skin forwarding is on, the server refuses direct joins, so `start_server.bat` and `start_keve.bat` only work after `Keve.bat --no-skin`.
 
+## Keve's personality
+
+Keve is a loud, theatrical, rock-and-roll Minecraft hero. It hypes you up, narrates tiny moments like movie scenes, and treats crafting as sacred. Everything about it is in [persona.json](persona.json), read at every start:
+
+- **`style`:** how the chat model talks. Rewrite it for a different personality.
+- **`acks`:** the instant replies to each order, picked at random. `{count}`, `{item}`, `{ore}`, `{label}` and `{name}` are filled in.
+- **`lines`:** the hello when Keve joins, what it says when it dies, "done", and "say that again".
+- **`voice`:** Kokoro's voice (`am_puck` by default; also `am_adam`, `am_fenrir`, `am_michael`, `bm_george`...) and its speed, plus the Windows voice's speed.
+
 ## Talking to Keve
 
 Say it out loud: **"Keve, follow me"**, **"Keve, get me ten wood and bring it to me"**, **"Keve, mine for diamonds"**. Every order in [COMMANDS.md](COMMANDS.md) works by voice too, and Keve says out loud what it says in chat. Start with "Keve". For about 20 seconds after Keve speaks, you can answer without its name.

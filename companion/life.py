@@ -232,4 +232,5 @@ class Sequence(Task):
             except Exception as e:  # one step going wrong doesn't end the plan
                 self.ctx.say(f"step {i + 1} went wrong ({e}), moving on.")
         if not self.done() and len(steps) > 1:
-            self.ctx.say("all done!")
+            import brain
+            self.ctx.say(brain.line("done", "all done!"))
