@@ -48,7 +48,7 @@ Keve is a loud, theatrical, rock-and-roll Minecraft hero. It hypes you up, narra
 - **`style`:** how the chat model talks. Rewrite it for a different personality.
 - **`acks`:** the instant replies to each order, picked at random. `{count}`, `{item}`, `{ore}`, `{label}` and `{name}` are filled in.
 - **`lines`:** the hello when Keve joins, what it says when it dies, "done", and "say that again".
-- **`voice`:** Kokoro's voice (`am_puck` by default; also `am_adam`, `am_fenrir`, `am_michael`, `bm_george`...) and its speed, plus the Windows voice's speed.
+- **`voice`:** Kokoro's voice (`am_michael` by default; also `am_fenrir`, `am_onyx`, `am_adam`, `bm_george`, `am_puck`...) and its speed, plus the Windows voice's speed. To hear the voices side by side, look in `voice-samples/` (made on your PC; not in the repo). For a smoother voice, `Keve.bat --setup-voice` offers Kokoro's higher-quality model (about 177 MB), and Keve uses it when it's there.
 
 ## Talking to Keve
 

@@ -34,6 +34,19 @@ def clean_heard(text):
     return re.sub(r"\s+", " ", t).strip()
 
 
+def speakable(text):
+    """Chat text made for a voice: ALL-CAPS shouting reads as letters ("A. M."), so it goes
+    to normal case; "..." becomes a pause; chat leftovers (*, _, coordinates' noise) go."""
+    t = text.replace("...", ",").replace("…", ",")
+    t = re.sub(r"[*_~`#]", "", t)
+    t = re.sub(r"\b([A-Z]{2,})\b", lambda m: m.group(1).capitalize() if m.group(1) not in ("TNT", "XP")
+               else m.group(1), t)
+    t = re.sub(r"\bkeve\b", "Keve", t, flags=re.I)
+    t = re.sub(r"\s*,\s*,+", ",", t)
+    t = re.sub(r"\s+", " ", t).strip(" ,")
+    return t
+
+
 # --- mouths ------------------------------------------------------------------------------
 class WindowsMouth:
     """System.Speech in one long-lived PowerShell: a line on stdin is spoken."""
@@ -82,8 +95,9 @@ class KokoroMouth:
     def __init__(self, voice="am_adam", speed=1.1):
         from kokoro_onnx import Kokoro  # noqa: import only when chosen
         import sounddevice
-        model = next((p for p in (VOICE_DIR / "kokoro-v1.0.int8.onnx", VOICE_DIR / "kokoro-v1.0.onnx")
-                      if p.exists()), None)
+        # The full or half-precision model sounds smoothest; the int8 one is smallest.
+        model = next((p for p in (VOICE_DIR / "kokoro-v1.0.onnx", VOICE_DIR / "kokoro-v1.0.fp16.onnx",
+                                  VOICE_DIR / "kokoro-v1.0.int8.onnx") if p.exists()), None)
         voices = VOICE_DIR / "voices-v1.0.bin"
         if model is None or not voices.exists():
             raise FileNotFoundError("Kokoro's model files aren't there (run Keve.bat --setup-voice)")
@@ -306,7 +320,9 @@ class Voice:
 
     def say(self, text):
         if self.mouth:
-            self.q.put(text)
+            text = speakable(text)
+            if text:
+                self.q.put(text)
 
     def _speak_loop(self):
         while True:

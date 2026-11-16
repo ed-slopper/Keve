@@ -471,6 +471,16 @@ def setup_voice(profile):
                           f"Keve uses Windows speech for that part.")
     if profile["mouth"] == "kokoro":
         VOICE_DIR.mkdir(parents=True, exist_ok=True)
+        hq = VOICE_DIR / "kokoro-v1.0.fp16.onnx"
+        if not hq.exists() and ask("Also get Kokoro's higher-quality model (kokoro-v1.0.fp16.onnx, about "
+                                   "170 MB) for a smoother, less robotic voice?", default="n"):
+            url = ("https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
+                   "kokoro-v1.0.fp16.onnx")
+            print(f"  downloading {url}")
+            try:
+                urllib.request.urlretrieve(url, hq)
+            except OSError as e:
+                print(f"  failed: {e}")
         for name, (url, size) in KOKORO_FILES.items():
             dest = VOICE_DIR / name
             if dest.exists():
