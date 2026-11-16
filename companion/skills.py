@@ -519,6 +519,83 @@ class Gather(Task):
             ctx.maybe_eat()
 
 
+ANIMAL_WORDS = {
+    "cow": "cow", "cows": "cow", "pig": "pig", "pigs": "pig", "sheep": "sheep", "chicken": "chicken",
+    "chickens": "chicken", "rabbit": "rabbit", "rabbits": "rabbit", "goat": "goat", "goats": "goat",
+    "mooshroom": "mooshroom", "zombie": "zombie", "zombies": "zombie", "skeleton": "skeleton",
+    "skeletons": "skeleton", "spider": "spider", "spiders": "spider", "creeper": "creeper",
+    "creepers": "creeper", "slime": "slime", "slimes": "slime", "witch": "witch", "husk": "husk",
+    "drowned": "drowned", "enderman": "enderman", "squid": "squid", "salmon": "salmon", "cod": "cod",
+}
+# What you can ask for that comes from an animal.
+DROP_ANIMALS = {"beef": "cow", "steak": "cow", "leather": "cow", "pork": "pig", "porkchop": "pig",
+                "porkchops": "pig", "bacon": "pig", "mutton": "sheep", "wool": "sheep",
+                "feathers": "chicken", "feather": "chicken", "eggs": "chicken", "rabbit hide": "rabbit"}
+
+
+class Hunt(Task):
+    """'keve kill this cow' / 'kill 3 pigs' / 'get me some leather': the nearest of that
+    animal Keve can see (near you), until enough are down."""
+    name = "hunt"
+
+    def run(self):
+        ctx = self.ctx
+        kind = self.args.get("mob")  # e.g. "cow"; None: the nearest animal or mob by you
+        want = int(self.args.get("count", 1))
+        killed = 0
+        misses = 0
+        while killed < want and not self.done():
+            target = self.find(kind)
+            if target is None:
+                misses += 1
+                if misses > 2:
+                    break
+                ctx.look_around(lambda n: False)  # turn around and look
+                continue
+            misses = 0
+            ctx.select_best(WEAPONS)
+            ctx.hunt(target["id"], 20.0, self)
+            if self.done():
+                return
+            gone = not any(e["id"] == target["id"] for e in
+                           ctx.senses.call("entities 24").get("entities", []))
+            if gone:
+                killed += 1
+        shown = (kind or "mob").replace("_", " ")
+        if self.done():
+            return
+        if killed:
+            ctx.collect(6, self)
+            ctx.say(f"got the {shown}." if want == 1 else f"killed {killed} {shown}s.")
+            if self.args.get("give"):
+                drops = [i for i in ctx.counts() if any(k in i for k in
+                         ("beef", "leather", "porkchop", "mutton", "wool", "chicken", "feather",
+                          "rabbit", "string", "bone", "rotten_flesh", "gunpowder"))]
+                if drops:
+                    Give(ctx, items=drops).run_inner(self)
+        else:
+            ctx.say(f"I don't see any {shown} around here.")
+
+    def find(self, kind):
+        """The nearest visible mob of that kind, near the player first (for 'this cow')."""
+        ctx = self.ctx
+        eye, yaw, pitch, pos = ctx.eye_and_view()
+        o = ctx.owner()
+        mobs = [e for e in ctx.senses.call("entities 32").get("entities", [])
+                if e.get("kind") == "mob" and e.get("type") != "minecraft:player"
+                and (kind is None or e.get("type", "").removeprefix("minecraft:") == kind)
+                and (e.get("health") is None or e["health"] > 0)]
+        if not mobs:
+            return None
+        snap = sight.Snapshot.read(ctx.senses, eye)
+        seen = [m for m in mobs if sight.entity_visible(snap, eye, yaw, pitch, tuple(m["pos"]),
+                                                        height=1.2, need_fov=False)]
+        if not seen:
+            return None
+        around = o[1] if o else pos
+        return min(seen, key=lambda m: math.dist(tuple(m["pos"]), around))
+
+
 class Give(Task):
     """Walk to the owner, face them and drop the items (all of a kind, or everything)."""
     name = "give"
@@ -688,7 +765,8 @@ HELP_LINES = [
     "craft torches from the chest / get the coal from the chest / put your stuff in the chest",
     "chain orders: get 10 wood then make a crafting table then come back",
     "place torches in this room / watch me <do something> ... ok did u see / copy what i did",
+    "any block or animal: mine this coal / open that door / kill this cow / what do you see",
     "give me your sand / give me everything / what you got / or just talk to me.",
 ]
 
-SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Defend, Status, Jump, LookAtMe, Help)}
+SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Hunt, Defend, Status, Jump, LookAtMe, Help)}

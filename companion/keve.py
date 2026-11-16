@@ -12,6 +12,7 @@ import threading
 import time
 import traceback
 
+import blocks
 import brain
 import containers
 import teach
@@ -26,9 +27,11 @@ from ctl import Body, Connection, CtlError, Senses
 skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Companion,
                                            life.SetHome, life.GoPlace, life.Sequence,
                                            containers.TakeFromChest, containers.PutInChest,
-                                           teach.Watch, teach.LightUp, teach.Replay)})
+                                           teach.Watch, teach.LightUp, teach.Replay,
+                                           blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
+                                           blocks.LookAround)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch")
+               "light_up", "replay", "watch", "break", "place_block", "hunt")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -198,7 +201,12 @@ class Keve:
         carrying = ", ".join(f"{n} {k.removeprefix('minecraft:').replace('_', ' ')}"
                              for k, n in top) or "nothing"
         doing = self.task.name if self.task and self.task.name != "idle" else "nothing"
-        return f"Keve is carrying: {carrying}. Keve is doing: {doing}."
+        try:  # what's in sight, so "this coal" or "that cow" mean something to Kev
+            seen = blocks.notable_nearby(self.ctx, radius=8, limit=6)
+        except Exception:
+            seen = []
+        sees = ", ".join(f"{k} ({d:.0f} blocks away)" for k, c, d in seen) or "nothing special"
+        return f"Keve is carrying: {carrying}. Keve is doing: {doing}. Keve can see: {sees}."
 
     def addressed_by_name(self, low):
         n = self.name.lower()

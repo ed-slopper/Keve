@@ -86,6 +86,25 @@ When it finishes a job (handing something over, a gather, a craft, a mining trip
 
 "The chest" is the nearest chest or barrel within 8 blocks of you. Keve has to be able to see it when it walks up.
 
+## Any block, any animal
+
+Keve knows every block and item in the game by name. It reads the game's own registry, tags and English names from your Horizon install, so you can point at anything.
+
+| You type | Keve does |
+| --- | --- |
+| `keve mine this coal` / `keve break that glass` / `keve dig this dirt` / `keve chop that birch log` | Breaks the nearest one by you that it can see, with the right tool, and picks up the drop. If the block needs a better pickaxe, it makes one first (stone for iron, iron for diamonds) |
+| `keve get me 10 andesite` / `keve break 5 glass` | Any block, as many as you say, nearest first |
+| `keve open that door` / `keve pull the lever` / `keve press the button` / `keve close the trapdoor` | Walks up and uses it |
+| `keve place a crafting table` / `keve put down a furnace` | Puts that item down next to you (it has to be carrying it) |
+| `keve what do you see` / `keve what's around` | Turns around and says what stands out: ores, chests, logs, water, lava, doors, beds, animals, mobs... |
+| `keve kill this cow` / `keve kill 3 pigs` / `keve attack that creeper` | Kills the nearest one it can see, by you first |
+| `keve kill the zombies` | All of them in sight (up to 5) |
+| `keve get me some leather` / `keve get me 5 beef` / `keve get some wool` | Hunts the animal that drops it (3 by default) and brings you the drops |
+
+- **"this" and "that"** mean the nearest one by you. If Keve can't see it from where it is, it walks over to you, then looks around.
+- **Mining trips:** "mine this coal" is that one block; "mine 10 iron" or "mine for diamonds" is still a mining trip.
+- **Kev's view:** it's told what Keve can see right now ("coal ore, 3 blocks away", "cow, 5 blocks away"), so "that" makes sense to it too.
+
 ## Torches
 
 | You type | Keve does |

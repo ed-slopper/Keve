@@ -106,6 +106,12 @@ def rule_route(text):
     chest = route_chest(text)
     if chest:
         return chest
+    hunt = route_hunt(text)
+    if hunt:
+        return hunt
+    block = route_block(text)
+    if block:
+        return block
     ore = find_ore(text)
     if ore and re.search(r"\b(mine|get|find|dig|look for|go for|bring)\b", text):
         return "mine", {"ore": ore, "count": parse_count(text) or (3 if ore == "diamond" else 8),
@@ -155,6 +161,10 @@ class Kev:
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
         "light_up": "Place torches to light up a room, a cave or an area",
+        "hunt": "Kill a particular animal or mob, like a cow, pig, sheep or zombie",
+        "break": "Break or mine one particular block nearby, like this coal, that glass or the dirt",
+        "use_block": "Use a block: open or close a door, pull a lever, press a button",
+        "look_around": "Say what it can see around it",
         "talk": "Not an order: chatting, joking or asking a question",
     }
     ITEMS = {
@@ -218,6 +228,7 @@ class Kev:
 
 # Orders the nervous system answers instantly, with no model call (stop must never wait).
 REFLEX_RULES = [
+    (r"\b(what (do|can) (you|u) see|what'?s (around|here|nearby)|what is (around|here)|look around)\b", "look_around"),
     (r"\b(did (you|u|ya) see( that| it| me)?|got (it|that)\??$|that'?s (it|how)( you do it)?|"
      r"ok(ay)? (done|that'?s it)|you see( that)?\??$|see that\??$)", "watch_done"),
     (r"\b(watch|look at|observe|study|learn from) (me|this|what i do|how i)\b", "watch"),
@@ -303,6 +314,60 @@ def parse_count(text):
     return None
 
 
+def route_hunt(text):
+    """'kill this cow', 'kill 3 pigs', 'get me some leather' -> the hunt skill."""
+    from skills import ANIMAL_WORDS, DROP_ANIMALS
+    words = re.findall(r"[a-z]+", text)
+    mob = next((ANIMAL_WORDS[w] for w in words if w in ANIMAL_WORDS), None)
+    killing = re.search(r"\b(kill|attack|hit|slay|hunt|murder|butcher|slaughter|punch|fight)\b", text)
+    if killing and mob:
+        plural = any(w in ANIMAL_WORDS and w != ANIMAL_WORDS[w] for w in words)  # "cows", "zombies"
+        n = parse_count(text) if re.search(r"[0-9]|one|two|three|four|five|six|seven|eight|nine|ten", text) else None
+        return "hunt", {"mob": mob, "count": n or (5 if plural else 1), "give": bool(GIVE_BACK.search(text))}
+    if killing and re.search(r"\b(this|that|it)\b", text) and not re.search(r"\b(mobs|monsters|them)\b", text):
+        return "hunt", {"mob": None, "count": 1, "give": False}
+    drop = next((DROP_ANIMALS[w] for w in words if w in DROP_ANIMALS), None)
+    if drop and re.search(r"\b(get|grab|bring|fetch|need|want|collect|gather)\b", text):
+        n = parse_count(text) if re.search(r"[0-9]", text) else None
+        return "hunt", {"mob": drop, "count": max(1, min(8, (n or 3))), "give": True}
+    return None
+
+
+def route_block(text):
+    """Any block by name: 'mine this coal', 'break that glass', 'open the door',
+    'pull the lever', 'place a crafting table', 'get me 10 andesite'."""
+    import world_names
+    names = world_names.names()
+    if names is None:
+        return None
+    deictic = bool(re.search(r"\b(this|that|these|those|here|there|next to|nearby|by me|near me|right)\b", text))
+    count = parse_count(text) if re.search(r"[0-9]|\b(two|three|four|five|six|seven|eight|nine|ten|some|a few)\b", text) else None
+    if re.search(r"\b(open|close|shut|press|push|pull|flip|toggle|ring|use|activate|hit)\b", text):
+        ids, label = names.blocks_in(text)
+        if ids:
+            return "use_block", {"ids": sorted(ids), "label": label, "near_owner": True}
+    if re.search(r"\b(place|put down|set down|put a|put an|put the|plop)\b", text) and not re.search(r"\btorch", text):
+        item, label = names.item_in(text)
+        if item:
+            return "place_block", {"item": item, "label": label}
+    if re.search(r"\b(mine|break|dig|chop|harvest|destroy|smash|cut|remove|knock|get rid of|clear)\b", text):
+        ids, label = names.blocks_in(text)
+        if not ids:
+            return None
+        ore = find_ore(text)
+        trip = ore and not deictic and (re.search(r"\b(for|deep|underground|mining|caves?)\b", text) or (count or 0) >= 2)
+        if trip:
+            return None  # a mining trip: the ore route takes it
+        return "break", {"ids": sorted(ids), "label": label, "count": count or 1,
+                         "near_owner": deictic or not count}
+    if re.search(r"\b(get|grab|collect|gather|fetch|bring)\b", text) and not find_item(text) and not find_ore(text):
+        ids, label = names.blocks_in(text)
+        if ids and not find_craftable(text):
+            return "break", {"ids": sorted(ids), "label": label, "count": count or 4,
+                             "near_owner": deictic, "give": bool(GIVE_BACK.search(text))}
+    return None
+
+
 def route_chest(text):
     """Orders about a chest or barrel: take from it, put into it, craft from it."""
     if not re.search(r"\b(chests?|barrels?)\b", text):
@@ -342,6 +407,12 @@ def plan(decision, text, have):
     chest = route_chest(text)
     if chest:
         return chest
+    hunt = route_hunt(text)
+    if hunt:
+        return hunt
+    block = route_block(text)
+    if block:
+        return block
     task = decision["task"]
     # Kev's confidence runs low even when its pick is right (0.2-0.3 on clear orders),
     # so its top pick is trusted unless it is "talk" or barely above chance.
@@ -455,6 +526,11 @@ ACKS = {
     "help": [""],
     "take": ["checking the chest", "on it"],
     "light_up": ["on it, lighting it up", "torches coming up"],
+    "hunt": ["on it", "say goodbye to it", "it's dead meat"],
+    "break": ["on it", "breaking the {label}", "getting the {label}"],
+    "use_block": ["got it"],
+    "place_block": ["placing the {label}"],
+    "look_around": [""],
     "replay": ["ok, like you showed me", "copying you"],
     "put": ["putting stuff away", "ok, into the chest"],
     "sequence": ["ok: {steps}", "got it: {steps}"],
