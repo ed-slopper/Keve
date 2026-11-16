@@ -100,6 +100,8 @@ NEW_AMOUNT = re.compile(r"\b\d+\b|\b(some|more|a few|a stack|a bunch|a lot)\b")
 def rule_route(text):
     if re.search(r"\b(help|commands|what can you do|what do you do)\b", text):
         return "help", {}
+    if re.search(r"\bgo (go )?mining\b|\bgo mine\b$", text) and not find_ore(text):
+        return "mine", {"ore": "iron", "count": 8, "give": bool(GIVE_BACK.search(text))}
     has_gather_verb = re.search(r"\b(get|collect|gather|grab|mine|chop|fetch|dig)\b", text)
     planted = route_plant(text)
     if planted:
@@ -239,7 +241,7 @@ REFLEX_RULES = [
     (r"\b(what (do|can) (you|u) see|what'?s (around|here|nearby)|what is (around|here)|look around)\b", "look_around"),
     (r"\b(did (you|u|ya) see( that| it| me)?|got (it|that)\??$|that'?s (it|how)( you do it)?|"
      r"ok(ay)? (done|that'?s it)|you see( that)?\??$|see that\??$)", "watch_done"),
-    (r"\b(watch|look at|observe|study|learn from) (me|this|what i do|how i)\b", "watch"),
+    (r"\b(watch|observe|study|learn from) (me|this|what i do|how i)\b", "watch"),
     (r"\b(place|put|stick|add|set) (some |the |a few |more )?torch|\blight (it |this |the |my |our )?"
      r"(up|room|area|cave|place|house|base|mine)\b|\blight up\b", "light_up"),
     (r"\b(do (it|that|the same)( again| here| like i (showed|did))?|copy (me|that|what i did)|"

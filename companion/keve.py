@@ -18,6 +18,7 @@ import plant
 import journal
 import containers
 import teach
+import translate
 import craft
 import life
 import mining
@@ -53,6 +54,9 @@ class Keve:
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None
         self.ctx.kev = self.kev  # companion mode asks Kev what to do
         self.talk = brain.Talker(args.ollama, args.brain_model, self.name, self.owner)
+        # The translator uses the chat model (it's already loaded); --no-translate turns it off.
+        self.translator = translate.Translator(
+            args.ollama, None if getattr(args, "no_translate", False) else args.brain_model)
         self.talk.ctx_tokens = getattr(args, "brain_ctx", 4096)
         life.Companion.DECIDE_EVERY = float(getattr(args, "decide_s", 4))
         self.task = None
@@ -176,6 +180,45 @@ class Keve:
         self.task_thread.start()
 
     # --- chat handling -------------------------------------------------------------
+    def route_commands(self, speaker, original, commands):
+        """The translator's commands -> one route, or a sequence of them."""
+        bring_back = bool(re.search(r"\b(bring|give|hand)\b.*\b(back|me|them|it)\b", original))
+        out = []
+        for cmd in commands:
+            r = brain.reflex_route(cmd) or brain.rule_route(cmd)
+            if r is None and self.kev:
+                d = self.kev.decide(speaker, cmd, self.name, self.situation())
+                r = brain.plan(d, cmd, self.have) if d else None
+            if r is None:
+                journal.log("route", f"no route for translated command: {cmd}")
+                continue
+            skill, args = r
+            if skill == "give" and args.get("item") and not args.get("items"):
+                # A hand-over of a gather word: check the inventory (get it first if short).
+                r = brain.plan({"task": "hand_over", "confidence": 1.0, "item": args["item"]},
+                               cmd, self.have) or r
+                skill, args = r
+            if bring_back and skill in ("gather", "mine", "hunt", "craft") and len(commands) == 1:
+                args = dict(args, give=True)  # "...then bring them back" got dropped: put it back
+            out.append((skill, args))
+        if not out:
+            return None
+        if len(out) == 1:
+            return out[0]
+        words = {"gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+                 "come": "come back", "follow": "follow you", "give": "bring it over",
+                 "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
+                 "defend": "guard you", "plant": "plant it", "hunt": "hunt {mob}",
+                 "break": "break the {label}", "place_block": "place the {label}"}
+        said = []
+        for skill, args in out:
+            shown = {k: (v.replace("_", " ") if isinstance(v, str) else v) for k, v in args.items()}
+            try:
+                said.append(words.get(skill, skill).format(**shown))
+            except (KeyError, IndexError):
+                said.append(skill.replace("_", " "))
+        return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
     def plan_steps(self, speaker, steps):
         """Several orders in one message: each step read on its own (reflexes, then Kev),
         run one after another."""
@@ -261,8 +304,25 @@ class Keve:
             if demo:
                 route = ("replay", {"demo": demo})
         decision = None
-        if route is None and self.kev:
-            # Part 2: Kev reads the message knowing what Keve carries and is doing.
+        translated = False
+        if route is None and self.translator.ok:
+            # Part 2: the translator (Gemma) rewrites what you said into Keve's commands,
+            # fixing mishearings and splitting several orders; the tested rules then run them.
+            tr = self.translator.translate(speaker, text, self.situation())
+            if tr is not None:
+                translated = True
+                journal.log("kev", f"translated: {tr['commands'] or ('chat' if tr['chat'] else '-')}",
+                            addressed=tr["addressed"])
+                print(f"[translate] {tr}")
+                if not (tr["addressed"] or named or recent):
+                    journal.log("route", "ignored: not talking to Keve")
+                    return
+                if tr["commands"]:
+                    route = self.route_commands(speaker, low, tr["commands"])
+                if route is None and not tr["chat"] and not tr["commands"]:
+                    translated = False  # it couldn't say: let Kev have a go
+        if route is None and self.kev and not translated:
+            # Part 3 (fallback): Kev reads the message knowing what Keve carries and is doing.
             decision = self.kev.decide(speaker, text, self.name, self.situation())
             if decision:
                 print(f"[kev] {decision}")
@@ -270,10 +330,10 @@ class Keve:
                                    f"item={decision.get('item')} addressed={decision.get('addressed', 0):.2f}")
         # Only your messages get here, and alone in a world with Keve most of them are to
         # Keve: a fairly low bar (0.69 for "place the sapling I just gave you" was missed at 0.7).
-        if not (named or recent or (decision and decision["addressed"] >= 0.55)):
+        if not (named or recent or translated or (decision and decision["addressed"] >= 0.55)):
             journal.log("route", "ignored: not talking to Keve")
             return
-        steps = brain.split_steps(low) if (named or recent) else []
+        steps = brain.split_steps(low) if (named or recent) and not translated else []
         if len(steps) > 1:
             route = self.plan_steps(speaker, steps) or route
         if route is None and decision:

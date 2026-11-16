@@ -504,6 +504,8 @@ def main():
     p.add_argument("--no-llm", action="store_true", help="no Ollama: plain orders only")
     p.add_argument("--profile", help="use this GPU profile from profiles.json (cpu, 4gb ... 128gb)")
     p.add_argument("--no-voice", action="store_true", help="no talking or listening")
+    p.add_argument("--no-translate", action="store_true",
+                   help="don't run your words through the chat model first (Kev and the rules only)")
     p.add_argument("--no-skin", action="store_true", help="Keve keeps the default skin (no skin proxy)")
     p.add_argument("--robot-head", default="observer",
                    help="the block Keve wears as a robot head (observer, dispenser, ... or none)")
@@ -571,7 +573,7 @@ def main():
     kargs = argparse.Namespace(socket=str(SOCK), name="Keve", owner=owner, anyone=False,
                                ollama=OLLAMA, kev_model=kev or None, brain_model=brain_model or None,
                                brain_ctx=profile.get("brain_ctx", 4096), decide_s=profile.get("decide_s", 4),
-                               ears=ears, mouth=mouth, whisper=profile.get("whisper") or "small.en",
+                               ears=ears, mouth=mouth, no_translate=args.no_translate, whisper=profile.get("whisper") or "small.en",
                                whisper_device=profile.get("whisper_device", "cpu"))
     if ears != "off" or mouth != "off":
         print(f"Voice: {ears} ears, {mouth} voice. Say 'Keve, follow me'.")

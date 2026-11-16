@@ -182,14 +182,19 @@ Keve uses the best weapon it has, and swings on the weapon's real cooldown. **Ba
 ## How it decides
 
 1. **Reflexes** (instant, no model): plain `stop`, `follow me`, `come here`, `stay`, `jump`, `look at me`, `help`, the place orders (`this is home`, `go home`...) and `play with me`.
-2. **Kev** reads everything else (the decision model, about 0.2 s). It's told what Keve is carrying and doing, and it picks:
-   - what you want: get, get and bring, hand over, mine, craft, follow, come, stay, defend, status, companion, or just talking;
-   - which item you mean.
-   So "give me 10 sand" with empty pockets means "go get 10 sand, then bring it". "bring me the sand" while carrying sand means "hand it over". "cut down some trees for me" is wood.
-3. **A check against the inventory** catches the rest. If you ask for items Keve doesn't have, or more than it has, it gets the rest first, then brings them.
-4. If it's not an order, **Gemma** writes a reply.
+2. **The translator** (Gemma, about 1 second): rewrites whatever you said into Keve's own command wording, then the tested rules run it. It:
+   - fixes voice mishearings ("plan a sapling" → plant, "Kevin"/"Diva" → keve);
+   - understands slang ("chuck me some logs" → get 10 wood and bring it to me);
+   - splits several orders ("grab wood, make a table, then come find me" → three steps, in order);
+   - works out "that" and "those" from what Keve carries and can see;
+   - tells chatting and teasing from orders, and orders from talking to someone else.
 
-Without Ollama, the keyword rules do steps 1 and 2.
+   Every translation is in the session log, so a wrong one is easy to spot. `Keve.bat --no-translate` turns it off.
+3. **Kev** (the decision model, about 0.2 s): the fallback when the translator isn't running or can't say. It's told what Keve is carrying, doing and seeing, and picks the task and the item.
+4. **A check against the inventory:** if you ask for items Keve doesn't have, or more than it has, it gets the rest first, then brings them.
+5. If it's not an order, **Gemma** writes a reply in character.
+
+Without Ollama, the keyword rules do all of this on their own.
 
 ## Fair play
 
