@@ -35,8 +35,10 @@ def find_item(text):
             return WORDS_TO_ITEM[w]
     return None
 NUMBER_WORDS = {"a": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-                "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twenty": 20, "a few": 4,
-                "some": 8, "a stack": 64, "a stack of": 64}
+                "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+                "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "twenty": 20,
+                "thirty": 30, "thirty two": 32, "forty": 40, "fifty": 50, "sixty four": 64,
+                "a few": 4, "some": 8, "a stack": 64, "a stack of": 64}
 
 RULES = [
     (r"\b(stop|cancel|halt|nevermind|never mind|freeze)\b", "stop"),
@@ -379,7 +381,7 @@ class Talker:
         try:
             r = _post(self.url, {"model": self.model, "messages": msgs, "stream": False,
                                  "keep_alive": "30m", "think": False,
-                                 "options": {"num_predict": 80, "temperature": 0.9, "num_ctx": 4096}},
+                                 "options": {"num_predict": 80, "temperature": 0.9, "num_ctx": getattr(self, "ctx_tokens", 4096)}},
                       timeout=90)
         except (urllib.error.URLError, OSError, ValueError) as e:
             print(f"[talk] unavailable ({e})")

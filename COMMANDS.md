@@ -2,6 +2,8 @@
 
 Type in normal chat (no `/`). Start with **keve** (or **kev**). Keve also listens for about 20 seconds after it last spoke, so a quick follow-up doesn't need its name.
 
+**Or say it out loud**: every order below works by voice ("Keve, mine for diamonds"), and Keve says its replies aloud. Voice setup is in the README.
+
 In game, type **`keve help`** for this list. Typing `/help keve` won't work: commands starting with `/` go straight to the server, and Keve can't see them.
 
 ## Moving

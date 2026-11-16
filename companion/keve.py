@@ -17,6 +17,7 @@ import craft
 import life
 import mining
 import skills
+import voice as voice_mod
 from ctl import Body, Connection, CtlError, Senses
 
 # The skills from the other modules join the registry.
@@ -42,13 +43,38 @@ class Keve:
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None
         self.ctx.kev = self.kev  # companion mode asks Kev what to do
         self.talk = brain.Talker(args.ollama, args.brain_model, self.name, self.owner)
+        self.talk.ctx_tokens = getattr(args, "brain_ctx", 4096)
+        life.Companion.DECIDE_EVERY = float(getattr(args, "decide_s", 4))
         self.task = None
         self.task_thread = None
         self.last_said = 0.0
+        self.voice = None
+        ears, mouth = getattr(args, "ears", "off"), getattr(args, "mouth", "off")
+        if ears != "off" or mouth != "off":
+            self.voice = voice_mod.Voice(ears=ears, mouth=mouth, on_heard=self.on_voice,
+                                         whisper_model=getattr(args, "whisper", "small.en"),
+                                         whisper_device=getattr(args, "whisper_device", "cpu"))
+            print(f"[voice] ears: {self.voice.ears_name}, voice: {self.voice.mouth_name}")
 
     def close(self):
+        if self.voice:
+            self.voice.close()
         for c in self._conns:
             c.close()
+
+    def on_voice(self, text):
+        """You said something: treat it as a chat line from you."""
+        heard = voice_mod.clean_heard(text)
+        if not heard:
+            return
+        print(f"[heard] {heard}")
+        speaker = self.owner or self.args.owner
+        if not speaker:
+            return
+        try:
+            self.handle_chat(speaker, heard)
+        except Exception:
+            traceback.print_exc()
 
     # --- talking -------------------------------------------------------------------
     def say(self, text):
@@ -61,6 +87,8 @@ class Keve:
             self.talk.note("assistant", text)
             self.last_said = time.time()
             print(f"[{self.name}] {text}")
+            if self.voice and text not in skills.HELP_LINES:  # the help list is for reading
+                self.voice.say(text)
         except CtlError as e:
             print(f"[say] {e}")
 

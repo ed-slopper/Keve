@@ -27,8 +27,14 @@ SOCK = KEVE_HOME / "keve-ctl.json"
 LAUNCHER = LOCAL / "Programs" / "Horizon Launcher" / "horizon-launcher.exe"
 SAVES = APPDATA / "horizon" / "saves"
 OLLAMA = "http://127.0.0.1:11434"
-KEV_MODEL = "hf.co/turintech/Kev-4B-Artemis-GGUF:Q4_K_M"
-BRAIN_MODEL = "huihui_ai/gemma-4-abliterated:12b"
+PROFILES = HERE.parent / "profiles.json"
+VOICE_DIR = KEVE_HOME / "voice"
+KOKORO_FILES = {  # kokoro-onnx's published model files (github.com/thewh1teagle/kokoro-onnx)
+    "kokoro-v1.0.int8.onnx": ("https://github.com/thewh1teagle/kokoro-onnx/releases/download/"
+                              "model-files-v1.0/kokoro-v1.0.int8.onnx", "about 90 MB"),
+    "voices-v1.0.bin": ("https://github.com/thewh1teagle/kokoro-onnx/releases/download/"
+                        "model-files-v1.0/voices-v1.0.bin", "about 28 MB"),
+}
 NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -97,14 +103,51 @@ def owner_name(args):
     return name
 
 
+# --- the graphics card and its profile ----------------------------------------------------
+def detect_vram_gb():
+    """Total memory of the biggest graphics card, in GB (0 when none is found)."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=10, creationflags=NO_WINDOW).stdout
+        mib = [int(x) for x in out.split() if x.strip().isdigit()]
+        if mib:
+            return max(mib) / 1024
+    except (OSError, subprocess.SubprocessError):
+        pass
+    # AMD and Intel: the driver's own number (Win32_VideoController stops at 4 GB, the registry doesn't).
+    script = ("$m = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\"
+              "{4d36e968-e325-11ce-bfc1-08002be10318}\\0*' -ErrorAction SilentlyContinue | "
+              "ForEach-Object { $_.'HardwareInformation.qwMemorySize' } | Measure-Object -Maximum; "
+              "if ($m.Maximum) { $m.Maximum } else { 0 }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
+                             text=True, timeout=20, creationflags=NO_WINDOW).stdout.strip()
+        return int(float(out or 0)) / 1024 ** 3
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0.0
+
+
+def choose_profile(name=None):
+    data = json.loads(PROFILES.read_text(encoding="utf-8"))
+    profiles = data["profiles"]
+    if name:
+        for pr in profiles:
+            if pr["name"] == name.lower().replace(" ", ""):
+                return pr, None
+        fail(f"no profile called {name}; there are: {', '.join(pr['name'] for pr in profiles)}")
+    vram = detect_vram_gb()
+    fits = [pr for pr in profiles if pr["min_vram_gb"] <= vram + 0.5]  # a "12 GB" card reports 11.9
+    return (fits[-1] if fits else profiles[0]), vram
+
+
 # --- Ollama -----------------------------------------------------------------------------
 def ollama_models():
     with urllib.request.urlopen(OLLAMA + "/api/tags", timeout=3) as r:
         return {m["name"] for m in json.loads(r.read()).get("models", [])}
 
 
-def ensure_ollama(args):
-    """Returns (kev_model or '', brain_model or '')."""
+def ensure_ollama(args, profile):
+    """Returns (kev_model or '', brain_model or '') for this profile."""
     if args.no_llm:
         return "", ""
     exe = shutil.which("ollama")
@@ -120,11 +163,13 @@ def ensure_ollama(args):
         wait_for(lambda: _try(ollama_models), 30, "Ollama")
         have = ollama_models()
     out = []
-    for model, size, use in ((KEV_MODEL, "2.5 GB", "understanding orders"),
-                             (BRAIN_MODEL, "7.6 GB", "chatting")):
-        if model in have:
+    for model, use in ((profile["kev"], "understanding orders"), (profile["brain"], "chatting")):
+        if not model:
+            out.append("")
+            continue
+        if model in have or model + ":latest" in have:
             out.append(model)
-        elif ask(f"Download {model} ({size}, for {use})?"):
+        elif ask(f"Download {model} (for {use}; the size is on its Ollama or Hugging Face page)?"):
             subprocess.run([exe, "pull", model])
             out.append(model)
         else:
@@ -253,12 +298,60 @@ def ensure_keve_game(ctl_exe, port):
     wait_for(lambda: keve_in_world(ctl_exe), 90, "Keve joining the server")
 
 
+# --- voice --------------------------------------------------------------------------------
+def voice_ready(profile):
+    """What voice can run now: (ears, mouth), falling back to Windows' own speech."""
+    import importlib.util as u
+    ears, mouth = profile["ears"], profile["mouth"]
+    if ears == "whisper" and not (u.find_spec("faster_whisper") and u.find_spec("sounddevice")):
+        ears = "windows"
+    if mouth == "kokoro" and not (u.find_spec("kokoro_onnx") and u.find_spec("sounddevice")
+                                  and all((VOICE_DIR / f).exists() for f in KOKORO_FILES)):
+        mouth = "windows"
+    return ears, mouth
+
+
+def setup_voice(profile):
+    """Install the better voice parts for this profile, asking before each download."""
+    step("Voice setup")
+    wants = []
+    if profile["ears"] == "whisper":
+        wants += ["faster-whisper", "sounddevice"]
+    if profile["mouth"] == "kokoro":
+        wants += ["kokoro-onnx", "sounddevice"]
+    wants = sorted(set(wants))
+    if not wants:
+        print("This profile uses Windows' built-in speech: nothing to install.")
+        return
+    print("Python packages from PyPI:", ", ".join(wants))
+    if ask("Install them with pip (roughly 100-300 MB with their dependencies)?"):
+        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", *wants])
+    if profile["mouth"] == "kokoro":
+        VOICE_DIR.mkdir(parents=True, exist_ok=True)
+        for name, (url, size) in KOKORO_FILES.items():
+            dest = VOICE_DIR / name
+            if dest.exists():
+                continue
+            if ask(f"Download Kokoro's {name} ({size}) from github.com/thewh1teagle/kokoro-onnx?"):
+                print(f"  downloading {url}")
+                try:
+                    urllib.request.urlretrieve(url, dest)
+                except OSError as e:
+                    print(f"  failed: {e}")
+    if profile["ears"] == "whisper":
+        print(f"faster-whisper downloads its '{profile['whisper']}' model the first time Keve listens "
+              f"(from Hugging Face, into {VOICE_DIR / 'whisper'}).")
+
+
 def main():
     p = argparse.ArgumentParser(description="Start everything for Keve")
     p.add_argument("--owner", help="your player name (default: the launcher's signed-in account)")
     p.add_argument("--port", type=int, default=25565)
     p.add_argument("--no-game", action="store_true", help="don't start your Horizon (it's already open)")
     p.add_argument("--no-llm", action="store_true", help="no Ollama: plain orders only")
+    p.add_argument("--profile", help="use this GPU profile from profiles.json (cpu, 4gb ... 128gb)")
+    p.add_argument("--no-voice", action="store_true", help="no talking or listening")
+    p.add_argument("--setup-voice", action="store_true", help="install the better voice for your profile")
     p.add_argument("--new-world", nargs="?", const="", metavar="SEED",
                    help="replace the server's world with a new one (the old one is kept in a backup "
                         "folder); SEED is optional, e.g. 2024 starts in a forest")
@@ -270,9 +363,24 @@ def main():
     owner = owner_name(args)
     print(f"Keve will listen to {owner}.")
 
+    step("Graphics card")
+    profile, vram = choose_profile(args.profile)
+    if vram is not None:
+        print(f"{vram:.1f} GB of VRAM found: using the {profile['name']} profile ({profile['label']}).")
+    else:
+        print(f"Using the {profile['name']} profile ({profile['label']}), as asked.")
+    print("Change it with Keve.bat --profile NAME, or edit profiles.json.")
+
     step("Models")
-    kev, brain_model = ensure_ollama(args)
-    print(f"Kev: {kev or 'off'}; chat: {brain_model or 'off'}")
+    kev, brain_model = ensure_ollama(args, profile)
+    print(f"Kev: {kev or 'off'}; chat: {brain_model or 'off (short built-in replies)'}")
+
+    if args.setup_voice:
+        setup_voice(profile)
+    ears, mouth = ("off", "off") if args.no_voice else voice_ready(profile)
+    if not args.no_voice and (ears, mouth) != (profile["ears"], profile["mouth"]):
+        print(f"Voice: using Windows speech for now ({ears} ears, {mouth} voice). "
+              f"For the better voice this profile can run, use Keve.bat --setup-voice once.")
 
     if args.new_world is not None:
         new_world(srv, args.port, args.new_world)
@@ -294,7 +402,12 @@ def main():
     step("Keve is in. Type 'keve help' in chat. Press Ctrl+C here to stop Keve.")
     import keve
     kargs = argparse.Namespace(socket=str(SOCK), name="Keve", owner=owner, anyone=False,
-                               ollama=OLLAMA, kev_model=kev or None, brain_model=brain_model or None)
+                               ollama=OLLAMA, kev_model=kev or None, brain_model=brain_model or None,
+                               brain_ctx=profile.get("brain_ctx", 4096), decide_s=profile.get("decide_s", 4),
+                               ears=ears, mouth=mouth, whisper=profile.get("whisper") or "small.en",
+                               whisper_device=profile.get("whisper_device", "cpu"))
+    if ears != "off" or mouth != "off":
+        print(f"Voice: {ears} ears, {mouth} voice. Say 'Keve, follow me'.")
     try:
         keve.Keve(kargs).run()
     except KeyboardInterrupt:
