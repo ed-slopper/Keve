@@ -451,9 +451,24 @@ def setup_voice(profile):
     if not wants:
         print("This profile uses Windows' built-in speech: nothing to install.")
         return
-    print("Python packages from PyPI:", ", ".join(wants))
-    if ask("Install them with pip (roughly 100-300 MB with their dependencies)?"):
-        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", *wants])
+    import importlib.util as u
+    mods = {"faster-whisper": "faster_whisper", "kokoro-onnx": "kokoro_onnx", "sounddevice": "sounddevice"}
+    wants = [w for w in wants if not u.find_spec(mods[w])]
+    if sys.version_info >= (3, 14):
+        print(f"Note: this is Python {sys.version_info.major}.{sys.version_info.minor}. The voice packages "
+              f"(onnxruntime, PyAV) only ship for Python 3.11-3.13 so far; install one of those "
+              f"(python.org) and Keve.bat will use it.")
+    if not wants:
+        print("The voice packages are already installed.")
+    else:
+        print(f"Python packages from PyPI, for Python {sys.version_info.major}.{sys.version_info.minor}:",
+              ", ".join(wants))
+        if ask("Install them with pip (roughly 50-300 MB with their dependencies)?"):
+            for w in wants:  # one at a time: one that can't install doesn't stop the others
+                r = subprocess.run([sys.executable, "-m", "pip", "install", "--only-binary=:all:", w])
+                if r.returncode:
+                    print(f"  {w} couldn't be installed for this Python (no ready-made build); "
+                          f"Keve uses Windows speech for that part.")
     if profile["mouth"] == "kokoro":
         VOICE_DIR.mkdir(parents=True, exist_ok=True)
         for name, (url, size) in KOKORO_FILES.items():
