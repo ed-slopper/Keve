@@ -101,6 +101,27 @@ class Keve:
         self.task_thread.start()
 
     # --- chat handling -------------------------------------------------------------
+    def have(self, item_word):
+        """How many of a gather word (wood, sand...) Keve carries."""
+        ok = skills.GATHER.get(item_word, (None, lambda i: False))[1]
+        try:
+            counts = self.ctrl.call("inventory").get("counts", {}) or {}
+        except CtlError:
+            return 0
+        return sum(n for i, n in counts.items() if ok(i))
+
+    def situation(self):
+        """A short line for Kev: what Keve carries and is doing."""
+        try:
+            counts = self.ctrl.call("inventory").get("counts", {}) or {}
+        except CtlError:
+            counts = {}
+        top = sorted(counts.items(), key=lambda kv: -kv[1])[:6]
+        carrying = ", ".join(f"{n} {k.removeprefix('minecraft:').replace('_', ' ')}"
+                             for k, n in top) or "nothing"
+        doing = self.task.name if self.task and self.task.name != "idle" else "nothing"
+        return f"Keve is carrying: {carrying}. Keve is doing: {doing}."
+
     def addressed_by_name(self, low):
         n = self.name.lower()
         return re.search(rf"\b{re.escape(n)}\b", low) is not None or re.search(r"\bkev\b", low) is not None
@@ -113,32 +134,31 @@ class Keve:
         low = text.lower().strip()
         named = self.addressed_by_name(low)
         recent = time.time() - self.last_said < 20
-        route = brain.rule_route(low) if (named or recent) else None
+        # Nervous system, part 1: instant reflexes (stop, follow, come...), no model.
+        route = brain.reflex_route(low) if (named or recent) else None
         decision = None
         if route is None and self.kev:
-            decision = self.kev.decide(speaker, text, self.name)
+            # Part 2: Kev reads the message knowing what Keve carries and is doing.
+            decision = self.kev.decide(speaker, text, self.name, self.situation())
             if decision:
                 print(f"[kev] {decision}")
         if not (named or recent or (decision and decision["addressed"] >= 0.7)):
             return
+        if route is None and decision:
+            route = brain.plan(decision, low, self.have)
+            if route is None and decision["task"] not in (None, "talk"):
+                route = brain.rule_route(low)  # Kev unsure: fall back to the keyword rules
+        elif route is None and not self.kev:
+            route = brain.rule_route(low)
+            if route and route[0] == "give":  # rules alone: still check the inventory
+                route = brain.plan({"task": "hand_over", "confidence": 1.0,
+                                    "item": route[1].get("item")}, low, self.have)
         if self.owner is None:
             self.owner = speaker
             self.ctx.owner_name = speaker
             self.talk.owner = speaker
             print(f"[keve] owner is {speaker}")
         self.talk.note("user", f"{speaker}: {text}")
-        if route is None and decision and decision["task"] not in (None, "none") \
-                and decision["confidence"] >= 0.45:
-            skill = decision["task"]
-            args = {}
-            if skill == "gather":
-                args = brain.parse_gather("get " + low) or {"unknown": "that"}
-                if "unknown" in args:
-                    skill = "cant"
-            elif skill == "give":
-                args = {"item": brain.find_item(low),
-                        "everything": bool(re.search(r"(everything|all)", low))}
-            route = (skill, args)
         if route is None:
             # Just talking: let the brain answer.
             if self.talk.ok:

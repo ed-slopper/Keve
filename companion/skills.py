@@ -468,9 +468,19 @@ class Give(Task):
         r = ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --sprint --timeout 40")
         if task.done():
             return
-        if not r.get("arrived"):
+        if not r.get("arrived") and r.get("distance", 99) > 5:
             ctx.say("I can't get to you to hand them over.")
             return
+        # The planner stops a little short; step in the rest of the way so the stack
+        # lands at their feet (a dropped stack flies about a block and a half).
+        for _ in range(10):
+            o = ctx.owner() or o
+            _, _, _, pos = ctx.eye_and_view()
+            if math.dist(pos, o[1]) <= 1.8:
+                break
+            ctx.body.call(f"look-at entity {o[0]}")
+            if (ctx.body.call("move forward 0.15").get("moved") or 0) < 0.05:
+                break
         given = 0
         for item in items:
             for _ in range(40):  # one stack per drop
@@ -481,7 +491,7 @@ class Give(Task):
                     break
                 o = ctx.owner() or o
                 # Aim at their head, so the stack flies to them instead of to Keve's feet.
-                ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 1.5:.2f} {o[1][2]:.2f}")
+                ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 0.9:.2f} {o[1][2]:.2f}")
                 if not ctx.body.call(f"select {item}").get("error"):
                     r = ctx.body.call("drop all")
                     given += (r.get("dropped_from") or {}).get("count", 0)

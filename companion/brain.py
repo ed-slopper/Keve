@@ -19,6 +19,7 @@ WORDS_TO_ITEM = {
     "pumpkin": "pumpkin", "pumpkins": "pumpkin", "clay": "clay",
 }
 CAN_GET = "wood, dirt, sand, gravel, stone, sugar cane, pumpkins and clay"
+GATHER_WORDS = {"wood", "dirt", "sand", "gravel", "stone", "sugar_cane", "pumpkin", "clay"}
 FILLER = {"me", "some", "the", "a", "an", "of", "for", "and", "please", "more", "them", "it", "to",
           "go", "you", "can", "could", "up", "few", "lot", "lots", "bunch", "us", "my", "your"}
 
@@ -127,16 +128,24 @@ class Kev:
     """The nervous system: Kev-4B through Ollama's /v1/systemone."""
 
     TASKS = {
-        "gather": "Collect blocks or items, like wood, dirt, sand, stone or sugar cane",
+        "get_and_bring": "Get or mine items and then bring or give them to the player",
+        "get": "Go get, mine, chop or collect items (and keep them)",
+        "hand_over": "Give the player items that Keve is already carrying",
         "follow": "Follow the player around",
         "come": "Come to where the player is",
         "stay": "Stay in place and wait",
-        "defend": "Fight hostile mobs near the player",
+        "defend": "Fight or kill hostile mobs, protect the player",
         "stop": "Stop what Keve is doing",
         "status": "Tell the player its health or what it is carrying",
-        "give": "Hand items over to the player",
         "help": "Explain what Keve can do",
-        "none": "Not a task, just talking or a question",
+        "talk": "Not an order: chatting, joking or asking a question",
+    }
+    ITEMS = {
+        "wood": "Wood, logs or trees", "dirt": "Dirt or grass", "sand": "Sand",
+        "gravel": "Gravel or flint", "stone": "Stone or cobblestone",
+        "sugar_cane": "Sugar cane", "pumpkin": "Pumpkins", "clay": "Clay",
+        "everything": "Everything Keve is carrying",
+        "other": "Some other item or block", "none": "No item is mentioned",
     }
 
     def __init__(self, url, model):
@@ -144,18 +153,23 @@ class Kev:
         self.model = model
         self.ok = True
 
-    def decide(self, speaker, text, name):
+    def decide(self, speaker, text, name, situation=""):
+        """What the player wants: {'addressed', 'task', 'confidence', 'item', 'item_confidence'}."""
         if not self.ok:
             return None
         body = {
             "model": self.model,
-            "state": f"Minecraft chat. {speaker} says: {text}",
+            "state": (f"Minecraft. {name} is an AI companion player. {situation}\n"
+                      f"{speaker} says in chat: {text}"),
             "questions": {
                 "addressed": {"type": "noul",
-                              "instructions": f"Is {speaker} talking to {name}, the AI companion?"},
+                              "instructions": f"Is {speaker} talking to {name}?"},
                 "task": {"type": "choice",
-                         "instructions": f"Which task is {speaker} asking {name} to do?",
+                         "instructions": f"What does {speaker} want {name} to do?",
                          "criteria": self.TASKS},
+                "item": {"type": "choice",
+                         "instructions": f"Which item is {speaker} talking about?",
+                         "criteria": self.ITEMS},
             },
         }
         try:
@@ -169,7 +183,83 @@ class Kev:
             "addressed": a.get("addressed", {}).get("noul", 0.0),
             "task": a.get("task", {}).get("choice"),
             "confidence": a.get("task", {}).get("confidence", 0.0),
+            "item": a.get("item", {}).get("choice"),
+            "item_confidence": a.get("item", {}).get("confidence", 0.0),
         }
+
+
+# Orders the nervous system answers instantly, with no model call (stop must never wait).
+REFLEX_RULES = [
+    (r"\b(stop|cancel|halt|nevermind|never mind|freeze)\b", "stop"),
+    (r"\b(help|commands|what can you do)\b", "help"),
+    (r"^\W*(keve|kev)?\W*(follow( me)?|let'?s go)\W*$", "follow"),
+    (r"^\W*(keve|kev)?\W*(come( here| over| back)?|over here|get over here)\W*$", "come"),
+    (r"^\W*(keve|kev)?\W*(stay|wait( here)?|stand still|hold up)\W*$", "stay"),
+    (r"^\W*(keve|kev)?\W*(jump)\W*$", "jump"),
+    (r"^\W*(keve|kev)?\W*(look at me)\W*$", "look"),
+]
+
+
+def reflex_route(text):
+    for pattern, skill in REFLEX_RULES:
+        if re.search(pattern, text):
+            return skill, {}
+    return None
+
+
+def parse_count(text):
+    n = re.search(r"\b(\d{1,3})\b", text)
+    if n:
+        return max(1, min(256, int(n.group(1))))
+    for w, v in sorted(NUMBER_WORDS.items(), key=lambda kv: -len(kv[0])):
+        if w not in ("a",) and re.search(rf"\b{w}\b", text):
+            return v
+    return None
+
+
+def plan(decision, text, have):
+    """Turn Kev's reading of a message into a skill, checked against what Keve carries.
+
+    `have(item_word)` -> how many Keve has. Returns (skill, args) or None (just talk)."""
+    task = decision["task"]
+    # Kev's confidence runs low even when its pick is right (0.2-0.3 on clear orders),
+    # so its top pick is trusted unless it is "talk" or barely above chance.
+    if task in (None, "talk") or decision["confidence"] < 0.1:
+        return None
+    if task in ("follow", "come", "stay", "defend", "stop", "status", "help"):
+        return task, {}
+    # Item: an exact word in the message wins; else Kev's pick.
+    item = find_item(text)
+    if item is None and decision.get("item") in GATHER_WORDS:
+        item = decision["item"]
+    everything = decision.get("item") == "everything" or re.search(r"\b(everything|all your)\b", text)
+    count = parse_count(text)
+    if task == "hand_over":
+        if everything and item is None:
+            return "give", {"item": None, "everything": True}
+        if item is None:
+            return "give", {"item": None}
+        n = have(item)
+        if n == 0 or (count and n < count):
+            # It doesn't have them (or not enough): get the rest first, then bring them.
+            return "gather", {"item": item, "count": (count or 10) - n, "give": True}
+        return "give", {"item": item}
+    # get / get_and_bring
+    if item is None:
+        if decision.get("item") == "other" or find_unknown(text):
+            return "cant", {"unknown": find_unknown(text) or "that"}
+        return "cant", {"unknown": "that"}
+    give = task == "get_and_bring" or bool(GIVE_BACK.search(text))
+    return "gather", {"item": item, "count": count or 10, "give": give}
+
+
+def find_unknown(text):
+    m = re.search(r"\b(get|collect|gather|grab|mine|chop|bring|fetch|dig|give)\b(.*)", text)
+    if not m:
+        return None
+    words = [w for w in re.findall(r"[a-z]+", m.group(2))
+             if w not in FILLER and w not in NUMBER_WORDS and w not in ("keve", "kev")]
+    return " ".join(words[:3]) or None
 
 
 PERSONA = (

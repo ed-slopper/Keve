@@ -48,9 +48,15 @@ Keve uses the best weapon it has, and swings on the weapon's real cooldown. **Ba
 
 ## How it decides
 
-1. **Rules** (instant) catch the orders above.
-2. If the rules don't match, **Kev** (the decision model, about 0.1 s) works out which order you meant, even when it's worded differently. For example, "kev can you go cut down a tree" is gather wood.
-3. If it's not an order, **Gemma** writes a reply.
+1. **Reflexes** (instant, no model): plain `stop`, `follow me`, `come here`, `stay`, `jump`, `look at me` and `help`.
+2. **Kev** reads everything else (the decision model, about 0.2 s). It's told what Keve is carrying and doing, and it picks:
+   - what you want: get, get and bring, hand over, follow, come, stay, defend, status, or just talking;
+   - which item you mean.
+   So "give me 10 sand" with empty pockets means "go get 10 sand, then bring it". "bring me the sand" while carrying sand means "hand it over". "cut down some trees for me" is wood.
+3. **A check against the inventory** catches the rest. If you ask for items Keve doesn't have, or more than it has, it gets the rest first, then brings them.
+4. If it's not an order, **Gemma** writes a reply.
+
+Without Ollama, the keyword rules do steps 1 and 2.
 
 ## Fair play
 
