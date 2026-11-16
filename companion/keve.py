@@ -135,6 +135,12 @@ class Keve:
 
         def run():
             try:
+                if task.name not in ("stay", "status", "help", "look", "jump"):
+                    # Up a tree (spawned there)? Climb down before walking anywhere.
+                    try:
+                        self.ctx.get_down_from_tree(self.ctx.state()["player"])
+                    except CtlError:
+                        pass
                 task.run()
             except CtlError as e:
                 if getattr(self, "closing", False) or task.cancelled.is_set():

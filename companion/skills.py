@@ -308,7 +308,47 @@ class Ctx:
             self.body.call("move back 0.6 --sprint --jump")
             self.body.call("move left 0.4 --jump")
             return True
-        return False
+        return self.get_down_from_tree(p)
+
+    def get_down_from_tree(self, p):
+        """Stuck on a treetop (it spawned there, or climbed up): the path planner won't drop
+        more than 3 blocks, so do what a player does: break the leaves (or log) underfoot
+        and fall, until it stands on the ground. True when it acted."""
+        def tree(name):
+            b = name.split("[", 1)[0]
+            return b.endswith("_leaves") or b.endswith("_log") or b.endswith("_wood")
+        acted = False
+        for _ in range(12):
+            px, py, pz = p["position"]
+            x, y, z = p["block_pos"]
+            col = self.senses.call(f"blocks {x} {y - 10} {z} {x} {y - 1} {z}").get("blocks", [])
+            below = {b[1]: b[3] for b in col}
+            if not tree(below.get(y - 1, "")):
+                return acted
+            # How far down is real ground (not tree)? Close enough: walking handles it.
+            ground = next((yy for yy in range(y - 1, y - 11, -1)
+                           if below.get(yy) and not tree(below[yy])), y - 11)
+            if y - ground <= 3 and acted is False:
+                return False
+            # Every tree block the body stands on (a body is 0.6 wide: up to four).
+            cells = {(int(math.floor(px + dx)), y - 1, int(math.floor(pz + dz)))
+                     for dx in (-0.29, 0.29) for dz in (-0.29, 0.29)}
+            if not acted:
+                self.say("whoa, I'm up a tree! coming down.")
+            for c in cells:
+                n = self.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
+                if n and tree(n[0][3]):
+                    if n[0][3].split("[", 1)[0].endswith(("_log", "_wood")):
+                        self.select_best(AXES)
+                    self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                    self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 10")
+            acted = True
+            self.body.call("wait 10")  # fall
+            try:
+                p = self.state()["player"]
+            except Exception:
+                return acted
+        return acted
     def maybe_eat(self):
         try:
             food = self.state()["player"]["food"]
