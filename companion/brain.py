@@ -342,8 +342,11 @@ def route_hunt(text):
 
 
 def route_plant(text):
-    """'plant the sapling' / 'plant 3 oak saplings' / 'plant the seeds'."""
-    if not re.search(r"\b(plant|sow)\b", text):
+    """'plant the sapling' / 'plant 3 oak saplings' / 'plant the seeds'. Voice often hears
+    'plant' as 'plan', and people say 'place / put down the sapling' too."""
+    planty = re.search(r"\b(saplings?|seeds?|propagules?|acorns?)\b", text)
+    if not (re.search(r"\b(plant|sow)\b", text) or
+            (planty and re.search(r"\b(plan|place|put|set|stick|drop)\b", text))):
         return None
     import world_names
     names = world_names.names()

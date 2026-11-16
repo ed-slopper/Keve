@@ -232,6 +232,10 @@ class WhisperEars:
         threading.Thread(target=self._loop, daemon=True).start()
 
     def _cb(self, data, frames, t, status):
+        # Checked as the sound comes in, not later: while a clip is being transcribed,
+        # frames wait in the queue, and by then Keve may have stopped talking.
+        if not self.gate():
+            return
         self.q.put(data[:, 0].copy())
 
     def _loop(self):
@@ -346,6 +350,14 @@ class Voice:
     def _heard(self, text):
         if not self.listening():
             return  # its own voice coming back through the speakers
+        # Its own line, caught by the mic anyway (speakers, a late clip): not you.
+        import difflib
+        plain = re.sub(r"[^\w\s]", "", text.lower()).strip()
+        now = time.time()
+        self.recent = [(t, s) for t, s in getattr(self, "recent", []) if now - t < 30]
+        for _, said in self.recent:
+            if plain and (plain in said or difflib.SequenceMatcher(None, plain, said).ratio() > 0.7):
+                return
         self.on_heard(text)
 
     def say(self, text):
@@ -357,6 +369,8 @@ class Voice:
     def _speak_loop(self):
         while True:
             text = self.q.get()
+            self.recent = getattr(self, "recent", []) + [
+                (time.time(), re.sub(r"[^\w\s]", "", text.lower()).strip())]
             # Roughly how long the line takes, plus a tail: the mic ignores that window.
             self.speaking_until = time.time() + 0.6 + len(text) * 0.075
             try:

@@ -268,7 +268,9 @@ class Keve:
                 print(f"[kev] {decision}")
                 journal.log("kev", f"task={decision.get('task')} ({decision.get('confidence', 0):.2f}) "
                                    f"item={decision.get('item')} addressed={decision.get('addressed', 0):.2f}")
-        if not (named or recent or (decision and decision["addressed"] >= 0.7)):
+        # Only your messages get here, and alone in a world with Keve most of them are to
+        # Keve: a fairly low bar (0.69 for "place the sapling I just gave you" was missed at 0.7).
+        if not (named or recent or (decision and decision["addressed"] >= 0.55)):
             journal.log("route", "ignored: not talking to Keve")
             return
         steps = brain.split_steps(low) if (named or recent) else []
