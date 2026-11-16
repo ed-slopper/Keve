@@ -137,9 +137,15 @@ class Keve:
             try:
                 task.run()
             except CtlError as e:
+                if getattr(self, "closing", False) or task.cancelled.is_set():
+                    return  # shutting down, or the order was replaced: nothing to report
                 print(f"[task {task.name}] {e}")
-                self.say(f"ugh, something broke ({e})")
+                if "isn't in the world" not in str(e):
+                    self.say(f"ugh, something broke ({e})")
+                return
             except Exception:
+                if getattr(self, "closing", False):
+                    return
                 traceback.print_exc()
                 self.say("my brain glitched, try again")
             finished = not task.cancelled.is_set() and self.task is task
@@ -303,10 +309,10 @@ class Keve:
             return
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
-        hello = brain.line("hello")
-        if hello:
-            self.say(hello)
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
+        greeting = brain.line("hello")
+        if greeting:
+            self.say(greeting)
         print("[keve] say '{0} follow me', '{0} get 10 wood', '{0} defend me', '{0} stop' in chat"
               .format(self.name.lower()))
         while True:
@@ -314,6 +320,9 @@ class Keve:
                 r = self.ctrl.call(f"events --since {last}")
             except CtlError as e:
                 print(f"[keve] lost the game: {e}")
+                self.closing = True
+                if self.task:
+                    self.task.cancelled.set()  # let the task stop before the connections go
                 self.close()
                 return
             for ev in r.get("events", []):

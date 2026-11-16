@@ -10,6 +10,7 @@ import threading
 import time
 
 import sight
+from ctl import CtlError
 
 # What a word in chat means: which blocks to look for and which items count.
 def base(name):
@@ -71,7 +72,11 @@ class Ctx:
 
     # --- own state -------------------------------------------------------------------
     def state(self):
-        return self.body.call("state")
+        st = self.body.call("state")
+        if not st.get("player"):
+            # Not in the world (dead, between worlds, or the game is quitting): stop here.
+            raise CtlError("Keve isn't in the world right now")
+        return st
 
     def eye_and_view(self):
         p = self.state()["player"]
