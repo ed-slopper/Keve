@@ -256,13 +256,43 @@ class WhisperEars:
                     audio = np.concatenate(buf)
                     talking, buf, quiet = False, [], 0
                     if len(audio) > self.RATE * 0.35:
-                        segs, _ = self.model.transcribe(audio, language="en", beam_size=1,
-                                                        vad_filter=False, condition_on_previous_text=False)
-                        text = " ".join(s.text for s in segs).strip()
+                        text = self.transcribe(audio)
                         if text:
                             self.on_heard(text)
             elif not loud:
                 floor = floor * 0.995 + float(np.sqrt(np.mean(f ** 2))) * 0.005
+
+    # Whisper "hears" these in fans, keyboards and breathing: they close most of the subtitled
+    # videos it learned from. Alone in a clip, they're almost never what you said.
+    PHANTOMS = {"thank you", "thank you very much", "thanks", "thanks for watching",
+                "thank you for watching", "thanks for watching!", "bye", "bye bye", "goodbye",
+                "you", "so", "okay", "oh", "uh", "um", "hmm", "please subscribe",
+                "subscribe", "see you next time", "i'll see you next time", "the end", "music",
+                "applause", "silence", "foreign", "."}
+
+    # Teaches Whisper the name and the kind of thing you say (it otherwise hears "keep").
+    PROMPT = "Keve, follow me. Keve, mine for diamonds. Keve, get me ten wood."
+
+    def transcribe(self, audio):
+        """Speech in a clip, or '' when it was only noise."""
+        try:
+            segs, _ = self.model.transcribe(
+                audio, language="en", beam_size=1, condition_on_previous_text=False,
+                initial_prompt=self.PROMPT, hotwords="Keve",
+                vad_filter=True, vad_parameters={"min_silence_duration_ms": 400},
+                no_speech_threshold=0.5, log_prob_threshold=-0.9)
+            segs = list(segs)
+        except Exception:  # the VAD model missing: plain transcription, the other checks still run
+            segs, _ = self.model.transcribe(audio, language="en", beam_size=1,
+                                            condition_on_previous_text=False)
+            segs = list(segs)
+        kept = [s for s in segs if getattr(s, "no_speech_prob", 0) < 0.5
+                and getattr(s, "avg_logprob", 0) > -1.0]
+        text = " ".join(s.text for s in kept).strip()
+        plain = re.sub(r"[^\w\s']", "", text.lower()).strip()
+        if not plain or plain in self.PHANTOMS:
+            return ""
+        return text
 
     def close(self):
         try:
