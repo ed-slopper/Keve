@@ -50,7 +50,7 @@ if errorlevel 1 (
   exit /b 1
 )
 "!CTL!" --socket "!SOCK!" --timeout 90 wait-ready >nul
-echo Keve joined. Talk to it in chat, for example: keve follow me
+echo Keve's game is up. Once it says "connected", talk to it in chat, for example: keve follow me
 echo Press Ctrl+C here to stop Keve.
 echo.
 

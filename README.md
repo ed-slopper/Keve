@@ -38,7 +38,13 @@ Gemma is only used for chat replies. Kev understands orders worded in unusual wa
 | `keve what you got` | Says its health, food and items |
 | anything else with "keve" in it | Answers in chat (Gemma) |
 
-**Signed-in accounts:** if the launcher is signed in to a Microsoft account, your LAN world runs in online mode, which can refuse Keve, because Keve joins as an offline player. If Keve can't join, play with an offline account in the launcher for now. Another option is to host the world with `horizon-server init --offline`, then `horizon-server run`, and have both of you join `127.0.0.1`.
+**Signed in with a Microsoft account? Use the server instead of LAN.**
+- When you're signed in, Open to LAN runs your world in online mode, and Horizon refuses Keve at login ("not signed in"), because Keve has no account.
+- Run `start_server.bat` instead. It sets up an offline-mode Horizon server in `%LOCALAPPDATA%\Keve\server`, and you accept Minecraft's EULA there yourself.
+- Join it in Horizon with Multiplayer → Direct Connection → `127.0.0.1`.
+- Then run `start_keve.bat 127.0.0.1:25565 YourName`.
+- **To play an existing world:** pass its folder the first time, e.g. `start_server.bat "%APPDATA%\horizon\saves\New World"`. It's copied; the original isn't touched.
+- Offline mode means anyone who can reach the port can join under any name. Keep it on your own PC or LAN.
 
 **Fair play:** Keve only knows the blocks and mobs it can see (ray cast from its eyes, in its field of view), and only sends whitelisted commands (`companion/ctl.py`). One exception for now: it always knows where you are, as the locator bar shows teammates.
 

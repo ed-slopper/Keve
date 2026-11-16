@@ -140,9 +140,21 @@ class Keve:
         self.start_task(skill, args)
 
     def run(self):
+        hello = {}
+        for _ in range(40):  # up to ~20 s for the join to finish
+            hello = self.ctrl.call("state")
+            if hello.get("player") and hello.get("screen") != "title":
+                break
+            time.sleep(0.5)
+        if not hello.get("player") or hello.get("screen") == "title":
+            print("[keve] Keve's game is not in your world: the server refused the join.")
+            print("[keve] The usual cause: your world is hosted by a signed-in (online-mode)")
+            print("[keve] account, and Keve joins as an offline player. Run start_server.bat to host")
+            print("[keve] an offline-mode server, join it yourself at 127.0.0.1, then run")
+            print("[keve] start_keve.bat 127.0.0.1:25565")
+            return
         last = self.ctrl.call("events --limit 1").get("last", 0)
-        hello = self.ctrl.call("state")
-        print(f"[keve] connected; {self.name} at {hello.get('player', {}).get('position')}")
+        print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
         print("[keve] say '{0} follow me', '{0} get 10 wood', '{0} defend me', '{0} stop' in chat"
               .format(self.name.lower()))
         while True:
