@@ -1,3 +1,6 @@
+https://discord.gg/Ad4FXvBSWQ
+
+
 # Keve
 
 **Steve + Kev:** an AI companion that plays Minecraft *with* you, running entirely on your own PC.
