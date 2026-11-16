@@ -63,6 +63,7 @@ class Ctx:
         self.self_name = self_name
         self.memory = {}          # (x, y, z) -> (block name, time seen); filled only by sight
         self.bad_targets = {}     # (x, y, z) -> failures
+        self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
 
     # --- own state -------------------------------------------------------------------
     def state(self):
@@ -140,6 +141,70 @@ class Ctx:
                 out.append(m)
         out.sort(key=lambda m: m["distance"])
         return out
+
+    # --- pick-up and fighting (horizon-ctl does these on its own side, so they're
+    # ported here: the game's socket has no `collect` or `hunt`) -------------------------
+    def collect(self, radius=6.0, task=None):
+        """Walk over the dropped items Keve can see within `radius`, nearest first."""
+        tried = set()
+        picked = 0
+        for _ in range(12):
+            if task is not None and task.done():
+                break
+            ents = self.senses.call(f"entities {radius:.0f}").get("entities", [])
+            items = [e for e in ents if e.get("kind") == "item" and e["id"] not in tried]
+            if not items:
+                break
+            eye, _, _, _ = self.eye_and_view()
+            snap = sight.Snapshot.read(self.senses, eye, rh=int(radius) + 1, rv=5)
+            now = time.time()
+            self.recent_breaks = [r for r in self.recent_breaks if now - r[3] < 90]
+
+            def known(e):
+                p = tuple(e["pos"])
+                if sight.entity_visible(snap, eye, 0, 0, p, height=0.3, need_fov=False):
+                    return True
+                # A drop from a block Keve broke itself: it watched it fall into the hole.
+                return any(math.dist(p, (r[0] + 0.5, r[1] + 0.5, r[2] + 0.5)) < 2.5
+                           for r in self.recent_breaks)
+
+            items = [e for e in items if known(e)]
+            if not items:
+                break
+            it = min(items, key=lambda e: e["distance"])
+            tried.add(it["id"])
+            before = sum(self.counts().values())
+            x, y, z = it["pos"]
+            r = self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.4 --timeout 4")
+            if not r.get("arrived"):
+                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.4 --timeout 3 --direct")
+            self.body.call("wait 4")
+            picked += max(0, sum(self.counts().values()) - before)
+        return picked
+
+    def hunt(self, mob_id, timeout=12.0, task=None):
+        """Walk up to a mob and hit it (respecting the attack cooldown) until it's gone."""
+        end = time.time() + timeout
+        last = None
+        while time.time() < end and not (task is not None and task.done()):
+            ents = self.senses.call("entities 48").get("entities", [])
+            mob = next((e for e in ents if e["id"] == mob_id), None)
+            if mob is None or (mob.get("health") is not None and mob["health"] <= 0):
+                break
+            last = mob
+            x, y, z = mob["pos"]
+            if mob["distance"] > 2.5:
+                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 1.5 --sprint --timeout 3")
+                continue
+            self.body.call(f"look-at entity {mob_id}")
+            if not self.body.call(f"attack {mob_id}").get("error"):
+                self.body.call("wait 12")  # a sword recharges in about 12 ticks
+            else:
+                self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.8 --timeout 2")
+        if last:  # walk over the drops
+            x, y, z = last["pos"]
+            self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 0.5 --timeout 4")
+            self.body.call("wait 10")
 
     # --- reflexes --------------------------------------------------------------------
     def maybe_eat(self):
@@ -244,11 +309,24 @@ class Gather(Task):
             return
         explores = 0
         breaks = 0
+        # Never mine much more than asked, even when drops go missing (fell in a hole,
+        # landed out of reach): a few spare blocks, then pick up what's around and stop.
+        max_breaks = want + max(3, want // 3)
         while not self.done():
             got = have()
-            if got >= goal:
-                ctx.body.call("collect 8")
-                ctx.say(f"got {got - start} {what}!")
+            if got >= goal or breaks >= max_breaks:
+                for _ in range(2):
+                    time.sleep(0.7)
+                    ctx.collect(10, self)
+                    got = have()
+                    if got >= goal:
+                        break
+                if got - start >= want:
+                    ctx.say(f"got {got - start} {what}!")
+                else:
+                    ctx.say(f"mined {breaks} but only picked up {got - start} {what}, some drops got away.")
+                if self.args.get("give"):
+                    Give(ctx, item=what).run_inner(self)
                 return
             # The nearest remembered target that hasn't failed too often.
             _, _, _, pos = ctx.eye_and_view()
@@ -288,12 +366,65 @@ class Gather(Task):
                 ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
                 continue
             ctx.memory.pop(t, None)
+            ctx.recent_breaks.append((t[0], t[1], t[2], time.time()))
             breaks += 1
+            # Pick up the drop. A fresh drop can't be picked up for 10 ticks (0.5 s), so
+            # wait that out first; sand and gravel can also fall and drops can roll.
+            time.sleep(0.7)
+            ctx.collect(5, self)
+            if self.done():
+                return
             # Look up and around the broken spot: the log above is visible now.
             ctx.look_around(block_ok, pitches=(-40.0, 0.0))
-            if breaks % 3 == 0:
-                ctx.body.call("collect 6")
             ctx.maybe_eat()
+
+
+class Give(Task):
+    """Walk to the owner, face them and drop the items (all of a kind, or everything)."""
+    name = "give"
+
+    def run(self):
+        self.run_inner(self)
+
+    def run_inner(self, task):
+        ctx = self.ctx
+        what = self.args.get("item")  # a GATHER word, or None for everything
+        item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
+        items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
+        if not items:
+            ctx.say(f"I don't have any {what or 'items'}.")
+            return
+        o = ctx.owner()
+        if not o:
+            ctx.say("where are you? I can't find you.")
+            return
+        r = ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --sprint --timeout 40")
+        if task.done():
+            return
+        if not r.get("arrived"):
+            ctx.say("I can't get to you to hand them over.")
+            return
+        given = 0
+        for item in items:
+            for _ in range(40):  # one stack per drop
+                if task.done():
+                    return
+                n = ctx.counts().get(item, 0)
+                if n <= 0:
+                    break
+                o = ctx.owner() or o
+                # Aim at their head, so the stack flies to them instead of to Keve's feet.
+                ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 1.5:.2f} {o[1][2]:.2f}")
+                if ctx.body.call(f"select {item}").get("error"):
+                    break  # not on the hotbar (main inventory): leave it for now
+                r = ctx.body.call("drop all")
+                given += (r.get("dropped_from") or {}).get("count", 0)
+                time.sleep(0.2)
+        if given:
+            # Step back: a dropped stack can be picked up again after 2 s, by anyone close.
+            ctx.body.call("move back 0.8")
+        ctx.say(f"here you go: {given} {what or 'items'}." if given else
+                "couldn't hand them over (they're not on my hotbar).")
 
 
 class Defend(Task):
@@ -310,8 +441,7 @@ class Defend(Task):
             if mobs:
                 m = mobs[0]
                 ctx.select_best(WEAPONS)
-                ctx.body.call(f"look-at entity {m['id']}")
-                ctx.body.call(f"hunt {m['id']} --timeout 12")
+                ctx.hunt(m["id"], 12.0, self)
                 if self.done():
                     return
                 continue
@@ -350,4 +480,22 @@ class LookAtMe(Task):
             self.ctx.body.call(f"look-at entity {o[0]}")
 
 
-SKILLS = {c.name: c for c in (Come, Follow, Stay, Gather, Defend, Status, Jump, LookAtMe)}
+class Help(Task):
+    name = "help"
+
+    def run(self):
+        for line in HELP_LINES:
+            self.ctx.say(line)
+            time.sleep(0.35)
+
+
+HELP_LINES = [
+    "things you can tell me (start with 'keve'):",
+    "follow me / come here / stay / stop / look at me / jump",
+    "get 10 wood, grab 5 dirt, collect sand, mine 20 stone (needs a pickaxe), gravel",
+    "...and bring them to me / give me your sand / give me everything",
+    "defend me (I fight mobs I can see near you) / what you got",
+    "or just talk to me.",
+]
+
+SKILLS = {c.name: c for c in (Come, Follow, Stay, Gather, Give, Defend, Status, Jump, LookAtMe, Help)}

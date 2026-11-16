@@ -57,10 +57,32 @@ def parse_gather(text):
     return {"item": item, "count": count}
 
 
+GIVE_BACK = re.compile(r"\b(bring|give|drop|hand|toss|throw)\b.*\b(me|to me|them|it)\b|\bbring me\b")
+
+
+def parse_give(text):
+    """'give me your sand' / 'give me everything' -> {'item': 'sand' | None}."""
+    if not re.search(r"\b(give|drop|hand|toss|throw)\b.*\b(me|over)\b", text):
+        return None
+    for word in re.findall(r"[a-z]+", text):
+        if word in WORDS_TO_ITEM:
+            return {"item": WORDS_TO_ITEM[word]}
+    if re.search(r"\b(everything|all|stuff|items|inventory)\b", text):
+        return {"item": None}
+    return None
+
+
 def rule_route(text):
+    if re.search(r"\b(help|commands|what can you do|what do you do)\b", text):
+        return "help", {}
     g = parse_gather(text)
     if g:
+        if GIVE_BACK.search(text) or re.search(r"\bbring\b", text):
+            g["give"] = True
         return "gather", g
+    g = parse_give(text)
+    if g:
+        return "give", g
     for pattern, skill in RULES:
         if re.search(pattern, text):
             return skill, {}
@@ -85,6 +107,8 @@ class Kev:
         "defend": "Fight hostile mobs near the player",
         "stop": "Stop what Keve is doing",
         "status": "Tell the player its health or what it is carrying",
+        "give": "Hand items over to the player",
+        "help": "Explain what Keve can do",
         "none": "Not a task, just talking or a question",
     }
 
@@ -177,6 +201,8 @@ ACKS = {
     "stop": ["ok ok, stopping", "stopped", "fine"],
     "defend": ["I got your back", "nothing's touching you", "on guard"],
     "gather": ["on it, getting {count} {item}", "{count} {item} coming up", "ok, {count} {item}"],
+    "give": ["coming over", "here, catch"],
+    "help": [""],
     "jump": ["there. happy?", "*jumps*"],
     "look": [""],
     "status": [""],

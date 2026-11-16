@@ -7,51 +7,35 @@ https://discord.gg/Ad4FXvBSWQ
 
 You type in chat, "keve get 10 wood", "keve mine for diamonds", "keve follow me", "keve defend me", and a second player in your world does it and answers back. Later it will come exploring with you and decide for itself when to fight, mine or help, partly copying what you do.
 
-> **Status: v0, playable.** Keve joins your world and handles chat orders: come, follow, stay, stop, status, jump, "get N wood/dirt/sand/gravel/stone" and defend. Deep mining, crafting and its own free will are next (see [docs/PLAN.md](docs/PLAN.md)).
+> **Status: v0, playable.** Keve joins your world and handles chat orders: follow, come, stay, stop, gather wood/dirt/sand/gravel/stone (and bring it to you), give, defend, status and help. Deep mining, crafting and its own free will are next (see [docs/PLAN.md](docs/PLAN.md)).
 
-## Play with Keve (v0, Windows)
+## Play with Keve (Windows)
 
 **You need:**
-- [Horizon](https://playhorizon.dev/download), installed with its launcher.
+- [Horizon](https://playhorizon.dev/download), installed with its launcher and played once.
 - Python 3.11 or newer.
-- [Ollama](https://ollama.com) with these models:
+- [Ollama](https://ollama.com) (optional). With it, Keve understands orders however you word them, and chats back. Without it, Keve still follows the plain orders.
 
-```bash
-ollama pull hf.co/turintech/Kev-4B-Artemis-GGUF:Q4_K_M
-```
-```bash
-ollama pull huihui_ai/gemma-4-abliterated:12b
-```
+**Double-click `Keve.bat`.** It does the rest:
+1. Finds your name from the Horizon launcher.
+2. Starts Ollama, and offers to download the two models if they're missing: Kev-4B (2.5 GB) and Gemma 4 12B (7.6 GB).
+3. **The first time only**, sets up an offline-mode Horizon server in `%LOCALAPPDATA%\Keve\server`. You accept Minecraft's EULA there yourself, and you can pick one of your worlds to copy in (the original isn't touched).
+4. Starts the server in its own window, then starts your Horizon, which joins it by itself.
+5. Starts Keve's game (headless: no window, no GPU) and brings it into the world.
+6. Runs Keve's brain. Press Ctrl+C in that window to stop Keve; it then asks whether to stop the server too.
 
-Gemma is only used for chat replies. Kev understands orders worded in unusual ways. Without Ollama, Keve still follows the plain orders.
+Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.md).
 
-**Steps:**
-1. Start Horizon and open a world. Then press Esc, choose **Open to LAN** and **Start LAN World**, and note the port that appears in chat.
-2. Run `start_keve.bat`. Type the port when asked, or pass it directly with your name: `start_keve.bat 127.0.0.1:PORT YourName`. Keve's game runs headless (no window, no GPU) and joins your world as the player "Keve".
-3. Type in chat:
+Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--owner NAME`, `--port N`.
 
-| You type | Keve does |
-| --- | --- |
-| `keve follow me` / `keve come here` / `keve stay` / `keve stop` | Follows you / walks to you / waits / stops |
-| `keve get 10 wood`, `keve grab 5 dirt`, `keve collect sand` | Looks around, walks to what it can *see*, mines it, picks it up |
-| `keve defend me` | Kills hostile mobs it can see within 12 blocks of you |
-| `keve what you got` | Says its health, food and items |
-| anything else with "keve" in it | Answers in chat (Gemma) |
+**Why a server and not Open to LAN?** When you're signed in with a Microsoft account, a LAN world runs in online mode, and Horizon refuses Keve at login, because Keve has no account. The offline-mode server lets both of you in. Offline mode means anyone who can reach the port can join under any name, so keep it on your own PC or LAN; don't forward the port.
 
-**Signed in with a Microsoft account? Use the server instead of LAN.**
-- When you're signed in, Open to LAN runs your world in online mode, and Horizon refuses Keve at login ("not signed in"), because Keve has no account.
-- Run `start_server.bat` instead. It sets up an offline-mode Horizon server in `%LOCALAPPDATA%\Keve\server`, and you accept Minecraft's EULA there yourself.
-- Join it in Horizon with Multiplayer → Direct Connection → `127.0.0.1`.
-- Then run `start_keve.bat 127.0.0.1:25565 YourName`.
-- **To play an existing world:** pass its folder the first time, e.g. `start_server.bat "%APPDATA%\horizon\saves\New World"`. It's copied; the original isn't touched.
-- Offline mode means anyone who can reach the port can join under any name. Keep it on your own PC or LAN.
+`start_server.bat` and `start_keve.bat` still exist, to run the pieces one at a time. If you play offline in the launcher, you can also use Open to LAN with `start_keve.bat 127.0.0.1:PORT`.
 
-**Fair play:** Keve only knows the blocks and mobs it can see (ray cast from its eyes, in its field of view), and only sends whitelisted commands (`companion/ctl.py`). One exception for now: it always knows where you are, as the locator bar shows teammates.
-
-**Known limits in v0:**
+**Known limits:**
 - Walking uses Horizon's built-in `goto`, which climbs only 1 block and never digs or bridges. Cliffs and big holes stop it.
 - Mining stone needs a pickaxe in its inventory.
-- `defend` hasn't been tested against real mobs yet.
+- Handing items over uses only stacks on Keve's hotbar.
 
 ## How it works
 

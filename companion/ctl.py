@@ -17,7 +17,7 @@ import threading
 BODY_ALLOWED = {
     "state", "inventory", "events", "messages", "looking-at",
     "goto", "move", "jump", "look", "look-at", "turn", "stop",
-    "break", "place", "interact", "use-item", "attack", "hunt", "collect",
+    "break", "place", "interact", "use-item", "attack", "wait",
     "select", "drop", "open-inventory", "click-slot", "close",
     "chat", "respawn",
 }
@@ -64,10 +64,16 @@ class Connection:
             return self._raw(line)
 
     def close(self):
-        try:
-            self._sock.close()
-        except OSError:
-            pass
+        for thing in (getattr(self, "_file", None), getattr(self, "_sock", None)):
+            if thing is None:
+                continue
+            try:
+                thing.close()
+            except OSError:
+                pass
+
+    def __del__(self):
+        self.close()
 
 
 class Body:

@@ -26,15 +26,20 @@ class Keve:
         self.owner = args.owner
         # Three connections: one for the running action (blocks while it walks or digs),
         # one for the main loop (chat, events, stop), one for the eyes.
-        self.act = Body(Connection(args.socket))
-        self.ctrl = Body(Connection(args.socket))
-        senses = Senses(Connection(args.socket))
+        self._conns = [Connection(args.socket) for _ in range(3)]
+        self.act = Body(self._conns[0])
+        self.ctrl = Body(self._conns[1])
+        senses = Senses(self._conns[2])
         self.ctx = skills.Ctx(self.act, senses, self.say, self.owner, self.name)
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None
         self.talk = brain.Talker(args.ollama, args.brain_model, self.name, self.owner)
         self.task = None
         self.task_thread = None
         self.last_said = 0.0
+
+    def close(self):
+        for c in self._conns:
+            c.close()
 
     # --- talking -------------------------------------------------------------------
     def say(self, text):
@@ -123,6 +128,8 @@ class Keve:
             args = {}
             if skill == "gather":
                 args = brain.parse_gather("get " + low) or {"item": "wood", "count": 10}
+            elif skill == "give":
+                args = brain.parse_give(low) or {"item": None}
             route = (skill, args)
         if route is None:
             # Just talking: let the brain answer.
@@ -162,6 +169,7 @@ class Keve:
                 r = self.ctrl.call(f"events --since {last}")
             except CtlError as e:
                 print(f"[keve] lost the game: {e}")
+                self.close()
                 return
             for ev in r.get("events", []):
                 last = max(last, ev.get("seq", last))
