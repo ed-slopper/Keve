@@ -231,8 +231,11 @@ def keve_in_world(ctl_exe):
 
 def ensure_keve_game(ctl_exe, port):
     if keve_in_world(ctl_exe):
-        print("Keve's game is already in the world.")
-        return
+        if ctl(ctl_exe, "status", timeout=10).get("renderer") is not None:
+            print("Keve's game is already in the world.")
+            return
+        # An older headless Keve: no renderer, so no crafting menus. Restart it.
+        print("Restarting Keve's game with a renderer (needed for crafting)...")
     if SOCK.exists():
         ctl(ctl_exe, "quit", timeout=10)  # an old one at the title screen
         time.sleep(2)
