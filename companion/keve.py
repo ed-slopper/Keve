@@ -14,6 +14,8 @@ import traceback
 
 import blocks
 import brain
+import plant
+import journal
 import containers
 import teach
 import craft
@@ -29,9 +31,9 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround)})
+                                           blocks.LookAround, plant.Plant)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch", "break", "place_block", "hunt")
+               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -80,6 +82,7 @@ class Keve:
         if not heard:
             return
         print(f"[heard] {heard}")
+        journal.log("heard", heard, via="voice", raw=text)
         speaker = self.owner or self.args.owner
         if not speaker:
             return
@@ -99,6 +102,7 @@ class Keve:
             self.talk.note("assistant", text)
             self.last_said = time.time()
             print(f"[{self.name}] {text}")
+            journal.log("say", text)
             if self.voice and text not in skills.HELP_LINES:  # the help list is for reading
                 self.voice.say(text)
         except CtlError as e:
@@ -141,11 +145,14 @@ class Keve:
                         self.ctx.get_down_from_tree(self.ctx.state()["player"])
                     except CtlError:
                         pass
+                journal.log("task", f"start {task.name}", args=task.args)
                 task.run()
+                journal.log("task", f"{'stopped' if task.cancelled.is_set() else 'done'} {task.name}")
             except CtlError as e:
                 if getattr(self, "closing", False) or task.cancelled.is_set():
                     return  # shutting down, or the order was replaced: nothing to report
                 print(f"[task {task.name}] {e}")
+                journal.log("task", f"failed {task.name}: {e}")
                 if "isn't in the world" not in str(e):
                     self.say(f"ugh, something broke ({e})")
                 return
@@ -153,6 +160,7 @@ class Keve:
                 if getattr(self, "closing", False):
                     return
                 traceback.print_exc()
+                journal.log_error(f"task {task.name} crashed")
                 self.say("my brain glitched, try again")
             finished = not task.cancelled.is_set() and self.task is task
             if finished and task.name in DONE_CROUCH:
@@ -234,6 +242,7 @@ class Keve:
         if self.owner and speaker != self.owner and not self.args.anyone:
             return
         low = text.lower().strip()
+        journal.log("heard", f"<{speaker}> {text}")
         named = self.addressed_by_name(low)
         recent = time.time() - self.last_said < 20
         if self.task and self.task.name == "watch":
@@ -257,7 +266,10 @@ class Keve:
             decision = self.kev.decide(speaker, text, self.name, self.situation())
             if decision:
                 print(f"[kev] {decision}")
+                journal.log("kev", f"task={decision.get('task')} ({decision.get('confidence', 0):.2f}) "
+                                   f"item={decision.get('item')} addressed={decision.get('addressed', 0):.2f}")
         if not (named or recent or (decision and decision["addressed"] >= 0.7)):
+            journal.log("route", "ignored: not talking to Keve")
             return
         steps = brain.split_steps(low) if (named or recent) else []
         if len(steps) > 1:
@@ -278,6 +290,7 @@ class Keve:
             print(f"[keve] owner is {speaker}")
         self.talk.note("user", f"{speaker}: {text}")
         if route is None:
+            journal.log("route", "just talking: Gemma answers" if self.talk.ok else "not understood")
             # Just talking: let the brain answer.
             if self.talk.ok:
                 self.say_later(speaker, text)
@@ -286,6 +299,7 @@ class Keve:
             return
         skill, args = route
         print(f"[keve] {speaker}: {text!r} -> {skill} {args}")
+        journal.log("route", f"-> {skill}", args=args)
         ack = random.choice(brain.ACKS.get(skill, [""]))
         if ack:
             shown = {k: (v.replace("_", " ") if isinstance(v, str) else v) for k, v in args.items()}
@@ -316,6 +330,8 @@ class Keve:
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
+        print(f"[keve] this session's log: {journal.path()}")
+        journal.log("note", f"Keve joined at {hello['player'].get('position')}", owner=self.owner)
         greeting = brain.line("hello")
         if greeting:
             self.say(greeting)
@@ -342,11 +358,13 @@ class Keve:
                         except Exception:
                             traceback.print_exc()
                 elif kind == "hurt":
+                    journal.log("event", "hurt", detail=ev)
                     try:
                         self.ctx.on_hurt(ev)
                     except CtlError:
                         pass
                 elif kind == "death":
+                    journal.log("event", "Keve died", detail=ev)
                     self.stop_task()
                     try:
                         self.ctrl.call("respawn")

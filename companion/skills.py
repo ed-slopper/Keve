@@ -105,6 +105,60 @@ class Ctx:
                 return s["slot"]
         return None
 
+    # --- getting around, water included ---------------------------------------------------
+    def water_between(self, a, b):
+        """Is Keve in water, or is there water along the straight line to b?"""
+        x0, y0, z0 = (int(math.floor(v)) for v in a)
+        x1, z1 = int(math.floor(b[0])), int(math.floor(b[2]))
+        lo, hi = (min(x0, x1), y0 - 2, min(z0, z1)), (max(x0, x1), y0 + 1, max(z0, z1))
+        if (hi[0] - lo[0] + 1) * (hi[2] - lo[2] + 1) * 4 > 30000:
+            return False
+        blocks = self.senses.call(f"blocks {lo[0]} {lo[1]} {lo[2]} {hi[0]} {hi[1]} {hi[2]}").get("blocks", [])
+        water = {(bx, bz) for bx, by, bz, n in blocks if n.split("[", 1)[0] == "minecraft:water"}
+        if (x0, z0) in water:
+            return True
+        n = max(abs(x1 - x0), abs(z1 - z0), 1)
+        return any((int(math.floor(a[0] + (b[0] - a[0]) * i / n)), int(math.floor(a[2] + (b[2] - a[2]) * i / n)))
+                   in water for i in range(n + 1))
+
+    def swim_toward(self, target, near=2.5, seconds=20.0, task=None):
+        """Swim straight at a point: face it, sprint and hold jump (keeps the head above
+        water), a short stroke at a time, until out of the water or there."""
+        end = time.time() + seconds
+        best = None
+        stalls = 0
+        while time.time() < end and not (task and task.done()):
+            p = self.state()["player"]
+            pos = tuple(p["position"])
+            d = math.dist(pos, target)
+            if d <= near:
+                return True
+            yaw = math.degrees(math.atan2(-(target[0] - pos[0]), target[2] - pos[2]))
+            self.body.call(f"look {yaw:.1f} 0")
+            r = self.body.call("move forward 0.5 --sprint --jump")
+            if best is None or d < best - 0.3:
+                best, stalls = d, 0
+            else:
+                stalls += 1
+                if stalls >= 6:  # a wall or a cliff: let the walker try again
+                    return False
+            if not self.water_between(pos, target) and p.get("on_ground") and (r.get("moved") or 0) > 0:
+                return False  # out of the water: walking is better from here
+        return False
+
+    def walk_to(self, target, near=3.0, timeout=4.0, sprint=True, task=None):
+        """Get to a point: the path planner, and across water by swimming. The goto reply."""
+        x, y, z = target
+        r = self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near {near} "
+                           f"{'--sprint ' if sprint else ''}--timeout {timeout}")
+        if r.get("arrived") or (task and task.done()):
+            return r
+        pos = tuple(self.state()["player"]["position"])
+        if self.water_between(pos, target):
+            self.swim_toward(target, near=near, seconds=max(timeout * 3, 12.0), task=task)
+            r = self.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near {near} --timeout {timeout}")
+        return r
+
     def to_hotbar(self, item):
         """Make sure `item` is on the hotbar (placing and using need it there): swap it
         in from the backpack through the inventory screen. True when it's there."""
@@ -456,7 +510,7 @@ class Come(Task):
         if not o:
             self.ctx.say("I can't find you!")
             return
-        r = self.ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2.5 --sprint --timeout 40")
+        r = self.ctx.walk_to(o[1], near=2.5, timeout=40, task=self)
         if self.done():
             return
         if r.get("arrived"):
@@ -484,8 +538,7 @@ class Follow(Task):
             eye, _, _, pos = self.ctx.eye_and_view()
             d = math.dist(pos, o[1])
             if d > 4.5:
-                r = self.ctx.body.call(
-                    f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 3 --sprint --timeout 4")
+                r = self.ctx.walk_to(o[1], near=3, timeout=4, task=self)
                 if self.done():
                     return
                 stuck = 0 if r.get("arrived") or r.get("distance", 99) < d - 1 else stuck + 1
@@ -757,7 +810,7 @@ class Give(Task):
                 told, end, stuck = True, time.time() + 20, 0
                 continue
             if d > 4.0:
-                ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2 --sprint --timeout 2")
+                ctx.walk_to(o[1], near=2, timeout=2, task=task)
             else:
                 # Close: step straight in (the planner stops a little short).
                 ctx.body.call(f"look-at entity {o[0]}")
@@ -825,7 +878,7 @@ class Defend(Task):
                 continue
             _, _, _, pos = ctx.eye_and_view()
             if math.dist(pos, o[1]) > 6:
-                ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 3 --sprint --timeout 4")
+                ctx.walk_to(o[1], near=3, timeout=4, task=self)
             else:
                 time.sleep(0.4)
             ctx.maybe_eat()
@@ -878,6 +931,7 @@ HELP_LINES = [
     "chain orders: get 10 wood then make a crafting table then come back",
     "place torches in this room / watch me <do something> ... ok did u see / copy what i did",
     "any block or animal: mine this coal / open that door / kill this cow / what do you see",
+    "plant the sapling / plant 3 oak saplings / plant the seeds",
     "give me your sand / give me everything / what you got / or just talk to me.",
 ]
 

@@ -10,7 +10,7 @@ In game, type **`keve help`** for this list. Typing `/help keve` won't work: com
 
 | You type | Keve does |
 | --- | --- |
-| `keve follow me` | Follows you, 3 to 4 blocks behind, eats when hungry, and **fights mobs it sees going for you** |
+| `keve follow me` | Follows you, 3 to 4 blocks behind (swimming across water too), eats when hungry, and **fights mobs it sees going for you** |
 | `keve come here` | Walks or sprints to where you are |
 | `keve stay` / `keve wait here` | Stops and waits (still hits back at mobs right next to it) |
 | `keve stop` | Stops whatever it's doing. Between orders it stands by and fights back |
@@ -104,6 +104,15 @@ Keve knows every block and item in the game by name. It reads the game's own reg
 - **"this" and "that"** mean the nearest one by you. If Keve can't see it from where it is, it walks over to you, then looks around.
 - **Mining trips:** "mine this coal" is that one block; "mine 10 iron" or "mine for diamonds" is still a mining trip.
 - **Kev's view:** it's told what Keve can see right now ("coal ore, 3 blocks away", "cow, 5 blocks away"), so "that" makes sense to it too.
+
+## Planting
+
+| You type | Keve does |
+| --- | --- |
+| `keve plant the sapling` / `keve plant 3 oak saplings` | Plants on grass or dirt next to you, with room above to grow, not right against another sapling |
+| `keve plant the seeds` / `keve plant the carrots` | On farmland |
+
+No sapling on hand: Keve breaks nearby leaves until one drops, then plants it.
 
 ## Torches
 

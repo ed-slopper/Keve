@@ -63,7 +63,7 @@ class GoPlace(Task):
             if math.dist(pos, (x, y, z)) < 3:
                 self.ctx.say(f"made it to {name}.")
                 return
-            r = self.ctx.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 2 --sprint --timeout 15")
+            r = self.ctx.walk_to((x, y, z), near=2, timeout=15, task=self)
             if not r.get("arrived") and r.get("distance", 99) > math.dist(pos, (x, y, z)) - 1:
                 self.ctx.body.call(f"goto {x:.2f} {y:.2f} {z:.2f} --near 2 --sprint --timeout 8 --direct")
         self.ctx.say(f"I can't find a way to {name} from here.")
@@ -107,7 +107,7 @@ class Companion(Task):
             d = math.dist(pos, o[1])
             # Keep up first: you're walking off, or it's too far.
             if d > 9 or (moving and d > 4):
-                ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 3 --sprint --timeout 3")
+                ctx.walk_to(o[1], near=3, timeout=3, task=self)
                 continue
             if now - last_decide < self.DECIDE_EVERY:
                 time.sleep(0.4)

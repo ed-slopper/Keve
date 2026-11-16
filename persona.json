@@ -35,6 +35,7 @@
     "light_up": ["let there be LIGHT!", "torches! banish the darkness!"],
     "replay": ["just like you showed me, master!", "the student becomes the master!"],
     "hunt": ["sorry little buddy, it's dinner time!", "the hunt begins!", "for the food chain!"],
+    "plant": ["planting a future FOREST!", "one sapling, planted with LOVE!"],
     "break": ["SMASH!", "that {label} doesn't stand a chance!", "{label}, meet my fist of fury!"],
     "use_block": ["click!", "allow me!"],
     "place_block": ["one {label}, coming right up!", "a {label}? you got it, buddy!"],

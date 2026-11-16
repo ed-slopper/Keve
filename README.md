@@ -29,6 +29,20 @@ Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.
 
 Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--no-voice`, `--setup-voice`, `--profile NAME`, `--owner NAME`, `--port N`.
 
+## When Keve does something odd: the session log
+
+Every session is written to `%LOCALAPPDATA%\Keve\logs\`. `latest.log` is always the newest one, and each session also keeps its own `session-<date>.log`, plus a `.jsonl` copy for tools. Keve's window prints the path when it starts. The log records:
+
+- **heard:** what you said, typed or by voice (with the raw transcript);
+- **kev:** how Kev read it (the task, its confidence, the item);
+- **route:** what Keve decided to do, with its arguments;
+- **task:** when each job started, finished, was stopped or failed;
+- **say:** everything Keve said;
+- **event:** hurts and deaths;
+- **error:** full tracebacks.
+
+So when Keve misbehaves, tell Claude (or anyone helping) to "look at Keve's latest log": everything needed to see what went wrong is in there.
+
 ## Keve's look
 
 Keve wears **your skin** with a **robot head** (an observer block worn on its head).

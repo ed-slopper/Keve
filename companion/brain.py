@@ -101,6 +101,9 @@ def rule_route(text):
     if re.search(r"\b(help|commands|what can you do|what do you do)\b", text):
         return "help", {}
     has_gather_verb = re.search(r"\b(get|collect|gather|grab|mine|chop|fetch|dig)\b", text)
+    planted = route_plant(text)
+    if planted:
+        return planted
     named = route_give_item(text)  # "give me the stone pickaxe": that item, not "stone"
     if named:
         return named
@@ -113,9 +116,6 @@ def rule_route(text):
     hunt = route_hunt(text)
     if hunt:
         return hunt
-    given = route_give_item(text)
-    if given:
-        return given
     block = route_block(text)
     if block:
         return block
@@ -169,6 +169,7 @@ class Kev:
         "companion": "Play or explore alongside the player on its own, deciding what to do",
         "light_up": "Place torches to light up a room, a cave or an area",
         "hunt": "Kill a particular animal or mob, like a cow, pig, sheep or zombie",
+        "plant": "Plant a sapling, seeds or a crop",
         "break": "Break or mine one particular block nearby, like this coal, that glass or the dirt",
         "use_block": "Use a block: open or close a door, pull a lever, press a button",
         "look_around": "Say what it can see around it",
@@ -340,6 +341,19 @@ def route_hunt(text):
     return None
 
 
+def route_plant(text):
+    """'plant the sapling' / 'plant 3 oak saplings' / 'plant the seeds'."""
+    if not re.search(r"\b(plant|sow)\b", text):
+        return None
+    import world_names
+    names = world_names.names()
+    item, _ = names.item_in(text) if names else (None, None)
+    if item is None and re.search(r"\bseeds?\b", text):
+        item = "minecraft:wheat_seeds"  # plain "seeds" in Minecraft means wheat seeds
+    n = parse_count(text) if re.search(r"[0-9]|\b(two|three|four|five|six|some|a few)\b", text) else None
+    return "plant", {"item": item, "count": n or 1}
+
+
 def route_give_item(text):
     """'give me a stone pickaxe' / 'bring me a furnace': that item, got first if needed."""
     if not re.search(r"\b(give|bring|hand|toss)\b", text):
@@ -438,6 +452,9 @@ def plan(decision, text, have):
     hunt = route_hunt(text)
     if hunt:
         return hunt
+    planted = route_plant(text)
+    if planted or decision.get("task") == "plant":
+        return planted or ("plant", {"item": None, "count": 1})
     given = route_give_item(text)
     if given:
         return given
@@ -575,6 +592,7 @@ ACKS = {
     "take": ["checking the chest", "on it"],
     "light_up": ["on it, lighting it up", "torches coming up"],
     "hunt": ["on it", "say goodbye to it", "it's dead meat"],
+    "plant": ["planting!", "a tree is born!"],
     "break": ["on it", "breaking the {label}", "getting the {label}"],
     "use_block": ["got it"],
     "place_block": ["placing the {label}"],
