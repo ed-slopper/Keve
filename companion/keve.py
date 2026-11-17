@@ -15,6 +15,7 @@ import traceback
 import blocks
 import brain
 import plant
+import room
 import journal
 import containers
 import teach
@@ -32,9 +33,9 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround, plant.Plant)})
+                                           blocks.LookAround, plant.Plant, room.DigRoom)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant")
+               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -201,11 +202,15 @@ class Keve:
             if bring_back and skill in ("gather", "mine", "hunt", "craft") and len(commands) == 1:
                 args = dict(args, give=True)  # "...then bring them back" got dropped: put it back
             out.append((skill, args))
+        # "follow me and help me dig this out": following never ends, so with a real job
+        # alongside it, the job is what's meant (and Keve comes to you first anyway).
+        if len(out) > 1 and any(s not in ("follow", "stay") for s, _ in out):
+            out = [(s, a) for s, a in out if s not in ("follow", "stay")]
         if not out:
             return None
         if len(out) == 1:
             return out[0]
-        words = {"gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+        words = {"dig_room": "dig out the room","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
                  "come": "come back", "follow": "follow you", "give": "bring it over",
                  "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
                  "defend": "guard you", "plant": "plant it", "hunt": "hunt {mob}",

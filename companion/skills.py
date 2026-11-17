@@ -929,7 +929,7 @@ HELP_LINES = [
     "defend me / this is home / go home / remember this as the mine / go to the mine",
     "craft torches from the chest / get the coal from the chest / put your stuff in the chest",
     "chain orders: get 10 wood then make a crafting table then come back",
-    "place torches in this room / watch me <do something> ... ok did u see / copy what i did",
+    "dig out this room bigger (on your level) / place torches in this room / watch me <do something> ... ok did u see / copy what i did",
     "any block or animal: mine this coal / open that door / kill this cow / what do you see",
     "plant the sapling / plant 3 oak saplings / plant the seeds",
     "give me your sand / give me everything / what you got / or just talk to me.",

@@ -119,6 +119,7 @@ No sapling on hand: Keve breaks nearby leaves until one drops, then plants it.
 | You type | Keve does |
 | --- | --- |
 | `keve place torches in this room` / `keve light up this cave` / `keve put some torches down` | Lights up the room you're standing in |
+| `keve dig out this room bigger` / `keve mine out a bigger room in here` / `keve make this room wider by 4` | Widens the room you are standing in, on your level (2 blocks by default). It never digs the floor or ceiling, and it plugs lava it uncovers |
 
 How it lights a room:
 - **What counts as the room:** the space you could walk to from where you stand, inside walls, within about 9 blocks.

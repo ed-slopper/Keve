@@ -169,6 +169,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "dig_room": "Dig out or widen a room or space where the player is, on the same level",
         "light_up": "Place torches to light up a room, a cave or an area",
         "hunt": "Kill a particular animal or mob, like a cow, pig, sheep or zombie",
         "plant": "Plant a sapling, seeds or a crop",
@@ -262,7 +263,24 @@ REFLEX_RULES = [
 ]
 
 
+ROOM = re.compile(r"\b(mine|dig|clear|carve|hollow|expand|widen|extend)\b[^.]*?\b(room|space)\b"
+                  r"|\b(bigger|larger|wider) (room|space)\b|\b(room|space) (bigger|larger|wider)\b"
+                  r"|\b(my|this|the same|our) y( |-)?level\b")
+
+
+def route_room(text):
+    """'mine out a bigger room in here' / 'help me dig out this room' / 'dig at my y level'."""
+    if not ROOM.search(text) or re.search(r"\b(torch|light)", text):
+        return None
+    m = re.search(r"\bby\s+(\d+)|(\d+)\s+(blocks?|more)\b", text)
+    size = int(m.group(1) or m.group(2)) if m else 2
+    return "dig_room", {"size": max(1, min(size, 6))}
+
+
 def reflex_route(text):
+    room = route_room(text)
+    if room:
+        return room
     for pattern, skill in REFLEX_RULES:
         m = re.search(pattern, text)
         if not m:
@@ -611,6 +629,7 @@ ACKS = {
     "help": [""],
     "take": ["checking the chest", "on it"],
     "light_up": ["on it, lighting it up", "torches coming up"],
+    "dig_room": ["renovation time", "digging it out"],
     "hunt": ["on it", "say goodbye to it", "it's dead meat"],
     "plant": ["planting!", "a tree is born!"],
     "break": ["on it", "breaking the {label}", "getting the {label}"],
