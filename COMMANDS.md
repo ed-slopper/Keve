@@ -10,7 +10,7 @@ In game, type **`keve help`** for this list. Typing `/help keve` won't work: com
 
 | You type | Keve does |
 | --- | --- |
-| `keve follow me` | Follows you, 3 to 4 blocks behind (swimming across water too), eats when hungry, and **fights mobs it sees going for you** |
+| `keve follow me` | Follows your actual trail: walks where you walked, sprints when you sprint or he falls behind, swims where you swam, and sprint-jumps where you jumped. Eats when hungry and **fights mobs it sees going for you** |
 | `keve come here` | Walks or sprints to where you are |
 | `keve stay` / `keve wait here` | Stops and waits (still hits back at mobs right next to it) |
 | `keve stop` | Stops whatever it's doing. Between orders it stands by and fights back |
@@ -56,7 +56,7 @@ How it mines:
 
 | You type | Keve does |
 | --- | --- |
-| `keve make a stone pickaxe` / `keve make a stone hoe` / `keve craft an iron sword` | Wooden, stone and iron pickaxes, swords, axes and shovels |
+| `keve make a stone pickaxe` / `keve make a stone hoe` / `keve make a boat` / `keve make a bucket` (anything craftable) / `keve craft an iron sword` | Anything a player can craft: every recipe is read from the game itself. Wood items (boat, door, fence, stairs...) use whatever planks he has. Several things at once ("a full set of stone tools") are added up first and the materials gathered in one trip |
 | `keve craft 16 torches` / `keve make a furnace` / `keve make a crafting table` | Torches, furnaces, crafting tables, sticks, planks |
 | `... and bring it to me` | Hands it over when it's made |
 

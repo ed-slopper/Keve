@@ -537,36 +537,111 @@ class Come(Task):
 
 
 class Follow(Task):
+    """Follow you like a friend would: along the way you went, not just toward you.
+
+    Keve keeps your trail (where you were, a few times a second) and walks it point by
+    point, so he goes where you went: over the same blocks, across the same water
+    (swimming), and where you jumped (left the ground on the way), he takes a sprint-jump
+    from where you took off. He sprints when you do or when he falls behind. When the trail
+    is no help (you teleported, it led nowhere), he finds his own way to you."""
     name = "follow"
+    KEEP = 4.0       # how close is close enough
+    SPRINT_GAP = 7.0
 
     def run(self):
+        ctx = self.ctx
         stuck = 0
         last_eat = 0.0
+        trail = []          # [(x, y, z, t, airborne)]
+        last_sample = None
         while not self.done():
             # A friend who follows you also fights what's attacking you.
             if self.guard():
                 continue
             self._announced = False
-            o = self.ctx.owner()
+            o = ctx.owner()
             if not o:
                 time.sleep(1.0)
                 continue
-            eye, _, _, pos = self.ctx.eye_and_view()
-            d = math.dist(pos, o[1])
-            if d > 4.5:
-                r = self.ctx.walk_to(o[1], near=3, timeout=4, task=self)
-                if self.done():
-                    return
-                stuck = 0 if r.get("arrived") or r.get("distance", 99) < d - 1 else stuck + 1
-                if stuck == 4:
-                    self.ctx.say("wait up, I'm stuck!")
-                    self.ctx.body.call("jump")
+            now = time.time()
+            op = tuple(o[1])
+            speed = 0.0
+            if last_sample is not None:
+                dt = max(now - last_sample[3], 1e-3)
+                speed = math.dist((op[0], op[2]), (last_sample[0], last_sample[2])) / dt
+            if last_sample is None or math.dist(op, last_sample[:3]) > 0.35:
+                # In the air: not standing on a block or slab top, and going up or down
+                # (walking on snow or carpet is off the grid too, but stays level).
+                airborne = abs(op[1] - round(op[1] * 2) / 2) > 0.08 and last_sample is not None                     and abs(op[1] - last_sample[1]) > 0.15
+                trail.append((op[0], op[1], op[2], now, airborne))
+                trail = trail[-200:]
+                last_sample = (op[0], op[1], op[2], now)
+            _, _, _, pos = ctx.eye_and_view()
+            d = math.dist(pos, op)
+            if d <= self.KEEP:
+                ctx.body.call(f"look-at entity {o[0]}")
+                trail = trail[-3:]
+                time.sleep(0.25)
             else:
-                self.ctx.body.call(f"look-at entity {o[0]}")
-                time.sleep(0.5)
-            if time.time() - last_eat > 10:
-                self.ctx.maybe_eat()
-                last_eat = time.time()
+                sprint = speed > 5.0 or d > self.SPRINT_GAP
+                if not self.walk_trail(trail, pos, sprint):
+                    # The trail didn't help: find a way there.
+                    r = ctx.walk_to(op, near=3, timeout=4, task=self)
+                    if self.done():
+                        return
+                    stuck = 0 if r.get("arrived") or r.get("distance", 99) < d - 1 else stuck + 1
+                    if stuck == 4:
+                        ctx.say("wait up, I'm stuck!")
+                        ctx.body.call("jump")
+                    trail = trail[-3:]
+                else:
+                    stuck = 0
+            if now - last_eat > 10:
+                ctx.maybe_eat()
+                last_eat = now
+
+    def walk_trail(self, trail, pos, sprint):
+        """One short leg along your trail. False when there's no usable trail."""
+        ctx = self.ctx
+        if not trail:
+            return False
+        # Where on your trail Keve is: the nearest point to him (in the last ~40 points).
+        recent = trail[-40:]
+        k = min(range(len(recent)), key=lambda n: math.dist(pos, recent[n][:3]))
+        if math.dist(pos, recent[k][:3]) > 6:
+            return False  # nowhere near where you went
+        ahead = recent[k + 1:]
+        if not ahead:
+            return False
+        # A jump ahead: where you took off (last point on the ground before the air).
+        for n, pt in enumerate(ahead[:6]):
+            if pt[4]:
+                take_off = ahead[n - 1] if n > 0 else recent[k]
+                land = next((q for q in ahead[n:] if not q[4]), None)
+                if land is None:
+                    break
+                ctx.body.call(f"goto {take_off[0]:.2f} {take_off[1]:.2f} {take_off[2]:.2f} "
+                              f"--near 0.5 --timeout 2 --direct" + (" --sprint" if sprint else ""))
+                ctx.body.call(f"look-at {land[0]:.2f} {land[1] + 0.2:.2f} {land[2]:.2f}")
+                ctx.body.call("move forward 0.5 --sprint --jump")
+                ctx.body.call(f"goto {land[0]:.2f} {land[1]:.2f} {land[2]:.2f} --near 0.6 --timeout 1.5 --direct --sprint")
+                return True
+        # Otherwise a leg of 2-3 blocks along it, straight (the trail already goes around things).
+        target = ahead[-1]
+        walked = 0.0
+        prev = recent[k][:3]
+        for pt in ahead:
+            walked += math.dist(prev, pt[:3])
+            prev = pt[:3]
+            if walked >= 2.5:
+                target = pt
+                break
+        r = ctx.body.call(f"goto {target[0]:.2f} {target[1]:.2f} {target[2]:.2f} --near 0.7 --timeout 1.2 --direct"
+                          + (" --sprint" if sprint else ""))
+        if self.done():
+            return True
+        after = ctx.eye_and_view()[3]
+        return math.dist(after, target[:3]) < math.dist(pos, target[:3]) - 0.3 or r.get("arrived", False)
 
 
 class Stay(Task):

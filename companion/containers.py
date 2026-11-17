@@ -152,7 +152,14 @@ class PutInChest(Task):
         if pos is not None and math.dist(ctx.eye_and_view()[3], pos) > 12:
             ctx.walk_to(pos, near=2.5, timeout=30, task=self)  # the job's chest, back where it was put
         if pos is None:
-            ctx.say("I don't see a chest near you.")
+            # "put them in a chest" with none around: make one right here, like you'd do.
+            ctx.say("no chest around, I'll make one!")
+            t = NewChest(ctx, put=None)
+            t.cancelled = self.cancelled
+            t.run()
+            pos = ctx.store_chest if ctx.store_chest and math.dist(ctx.eye_and_view()[3], ctx.store_chest) < 6 else None
+        if pos is None:
+            ctx.say("I couldn't get a chest to put them in.")
             return
         if not ch.open(pos):
             ctx.say("I can't get to that chest.")
@@ -226,7 +233,11 @@ class NewChest(Task):
         ctx.say(f"new chest at {spot[0]} {spot[1]} {spot[2]}!")
         put = self.args.get("put")
         if put and not self.done():
-            t = PutInChest(ctx, item=None if put == "*" else put, pos=spot)
+            items = None
+            if put == "@recent":  # "put them in it": what he just made, or the job's things
+                items = list(dict.fromkeys(ctx.made_batch)) or ctx.quest_items() or None
+                put = "*" if not items else None
+            t = PutInChest(ctx, item=None if put in ("*", None) else put, items=items, pos=spot)
             t.cancelled = self.cancelled
             t.run()
         resume = self.args.get("resume")

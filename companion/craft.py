@@ -64,6 +64,15 @@ def fuel_value(item):
     return 0
 
 
+# Everything else a player can craft, from the game's own recipe files.
+try:
+    import recipes as _recipes
+    import world_names as _world_names
+    LOADED_RECIPES = _recipes.Loader(_world_names.game_data_dir()).load(RECIPES, INGREDIENTS)
+except Exception as _e:  # no game data found: the hand-written recipes still work
+    LOADED_RECIPES = 0
+
+
 class NeedMore(Exception):
     """Crafting can't go on: something raw has to be gathered or mined first."""
 
@@ -102,9 +111,16 @@ class Crafter:
 
     def raw_needs(self, item, count):
         """The raw materials still missing to make `count` of `item`, e.g. {'log': 2}."""
+        return self.raw_needs_many([(item, count)])
+
+    def raw_needs_many(self, wanted):
+        """The raw materials missing for a whole list [(item, count)...] made one after
+        another from the same inventory: what a quest needs, to gather in one go."""
         inv = self.inventory_by_ingredient()
         out = {}
         tables = [inv.get("crafting_table", 0) > 0]
+
+        making = []
 
         def need(ing, n):
             use = min(inv.get(ing, 0), n)
@@ -112,9 +128,10 @@ class Crafter:
             n -= use
             if n <= 0:
                 return
-            if ing not in RECIPES:
-                out[ing] = out.get(ing, 0) + n
+            if ing not in RECIPES or ing in making or len(making) > 8:
+                out[ing] = out.get(ing, 0) + n  # raw (or a recipe that loops back): get it
                 return
+            making.append(ing)
             size, pattern, makes = RECIPES[ing]
             batches = math.ceil(n / makes)
             if size == 3 and not tables[0]:
@@ -122,9 +139,11 @@ class Crafter:
                 need("crafting_table", 1)
             for part in pattern.values():
                 need(part, batches)
+            making.pop()
             inv[ing] = inv.get(ing, 0) + batches * makes - n
 
-        need(item, count)
+        for item, count in wanted:
+            need(item, count)
         return out
 
     # --- crafting ---------------------------------------------------------------------
@@ -189,7 +208,10 @@ class Crafter:
             placed = 0
             while placed < len(cells):
                 slots = self.slots()
-                src = next((s for s, st in slots.items() if s < 100 and ok(st["item"])), None)
+                # One stack that fills every cell first: a boat out of one kind of planks.
+                mine = [(s, st) for s, st in slots.items() if s < 100 and ok(st["item"])]
+                whole = [s for s, st in mine if st["count"] >= len(cells) - placed]
+                src = whole[0] if whole else (mine[0][0] if mine else None)
                 if src is None:
                     raise RuntimeError(f"ran out of {ing} while crafting")
                 self.click(src)  # pick the stack up

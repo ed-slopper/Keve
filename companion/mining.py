@@ -42,6 +42,9 @@ def ore_of(name):
 is_solid = sight.blocks_body
 
 
+RAW_NAMES = {"log": "logs", "cobble": "cobblestone", "iron_ingot": "iron ingots", "coal": "coal"}
+
+
 class Provision:
     """Get an item by crafting it, gathering or mining what it needs first."""
 
@@ -101,10 +104,17 @@ class Provision:
                 return False
             ctx.say(f"getting {n + 2} cobblestone")
             before = self.crafter.count("cobble")
-            # Stone in sight first; if there's none, dig down for it like a player would.
-            t = Gather(ctx, item="stone", count=n + 2, quiet_fail=True, max_explores=1)
-            t.cancelled = self.task.cancelled
-            t.run()
+            # Stone close by and in sight first (a cliff, a cave mouth); otherwise dig down right
+            # here, like a player would, instead of walking off to find bare stone.
+            import blocks as _blocks
+            eye = ctx.eye_and_view()[0]
+            near = _blocks.nearest_visible(ctx, {"minecraft:stone", "minecraft:deepslate", "minecraft:andesite",
+                                                 "minecraft:diorite", "minecraft:granite", "minecraft:tuff"},
+                                           eye, radius=10)
+            if near is not None and math.dist(near, eye) <= 10:
+                t = Gather(ctx, item="stone", count=n + 2, quiet_fail=True, max_explores=0)
+                t.cancelled = self.task.cancelled
+                t.run()
             if self.crafter.count("cobble") - before < n:
                 dig_for_stone(ctx, self.task, self.crafter.count("cobble") + n + 2)
         elif what == "iron_ingot":
@@ -115,7 +125,24 @@ class Provision:
         elif what in ("coal", "fuel"):
             ctx.say("need fuel, getting some wood")
             self.sub(Gather, item="wood", count=3)
+        elif what.endswith("_log") or what.startswith("tag:") and "log" in what:
+            ctx.say(f"need wood first, getting {n + 1} logs")
+            self.sub(Gather, item="wood", count=n + 1)  # any tree; the planks follow the wood
+        elif what in GATHER:
+            ctx.say(f"getting {n} {what.replace('_', ' ')} first")
+            self.sub(Gather, item=what, count=n)
+        elif what in ORES or what in ("diamond", "redstone", "lapis_lazuli", "emerald"):
+            ore = {"lapis_lazuli": "lapis"}.get(what, what)
+            if ore in ORES:
+                ctx.say(f"I need {n} {what.replace('_', ' ')}, going mining for it.")
+                self.sub(Mine, ore=ore, count=n)
+            else:
+                return False
         else:
+            shown = what.removeprefix("tag:").removeprefix("any:").split(",")[0].replace("_", " ")
+            ctx.say(f"I need {n} {shown} for that, and I don't know how to get it myself yet. "
+                    f"if you give me some, I'll make it!")
+            self.missing = (what, n)
             return False
         return True
 

@@ -216,9 +216,36 @@ class Sequence(Task):
     """Several orders in a row ('chop 10 wood, then make a table, then come back')."""
     name = "sequence"
 
+    def gather_up_front(self, steps):
+        """Several things to craft: add up what they all need first and get it in one trip
+        ('a full set of stone tools' is 2 logs and 11 cobblestone, not five trips)."""
+        crafts = [(a["item"], int(a.get("count", 1))) for s, a in steps
+                  if s == "craft" and not a.get("from_chest") and a.get("item")]
+        if len(crafts) < 2:
+            return
+        import mining
+        prov = mining.Provision(self.ctx, self)
+        prov.goal = crafts[0][0]
+        try:
+            needs = prov.crafter.raw_needs_many(crafts)
+        except Exception:
+            return
+        if not needs:
+            return
+        shown = ", ".join(f"{n} {mining.RAW_NAMES.get(k, k.replace('_', ' '))}" for k, n in needs.items())
+        self.ctx.say(f"for all that I need {shown}. getting it all first!")
+        for raw, n in needs.items():
+            if self.done():
+                return
+            if not prov.get_raw(raw, n, 0):
+                return  # the crafts themselves will say what's missing
+            if self.done():
+                return
+
     def run(self):
         import skills
         steps = self.args.get("steps", [])
+        self.gather_up_front(steps)
         for i, (skill, args) in enumerate(steps):
             if self.done():
                 return

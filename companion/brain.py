@@ -422,6 +422,22 @@ def find_craftable(text):
                        ("furnace", "furnace"), ("stick", "stick"), ("plank", "planks")):
         if word in t:
             return item
+    # Anything else the game can craft, by name: "a boat", "a bucket", "some ladders".
+    try:
+        import craft
+        import world_names
+        names = world_names.names()
+    except Exception:
+        return None
+    if names is None:
+        return None
+    for ph in names._phrases(t):
+        key = ph.replace(" ", "_")
+        if key in craft.RECIPES:
+            return key
+        item = names.items_by_name.get(ph)
+        if item and item.removeprefix("minecraft:") in craft.RECIPES:
+            return item.removeprefix("minecraft:")
     return None
 
 
@@ -560,7 +576,7 @@ def route_block(text):
 
 
 NEW_CHEST = re.compile(r"\b(make|craft|build|place|put down|set down|set up|get out|need)\b(\s+(me|us))?\s+"
-                       r"(a |an |another |a new |new |one more |a second )?(chest|barrel)\b")
+                       r"(a |an |another |a new |new |one more |a second )?chest\b(?! ?(boat|minecart|raft))")
 
 
 def route_new_chest(text):
@@ -571,8 +587,14 @@ def route_new_chest(text):
     m = re.search(r"\b(store|put|keep|stash|dump|stick|for)\b(.*)$", text)
     if m:
         rest = m.group(2)
+        tools = re.search(r"\b(?:(wood(?:en)?|stone|iron|diamond|gold(?:en)?) )?tools\b", rest)
         if re.search(r"\b(stuff|everything|all|things|items|inventory)\b", rest):
             put = "*"
+        elif tools:
+            mat = {"wood": "wooden", "gold": "golden"}.get(tools.group(1) or "", tools.group(1) or "")
+            put = f"{mat + '_' if mat else ''}tools"
+        elif re.search(r"\b(them|those|these|it)\b", rest) and not named_item(rest)                 and not find_item(rest) and not find_ore(rest):
+            put = "@recent"  # "put them in it": what Keve just made (or got for the job)
         else:
             named = named_item(re.sub(r"\b(chests?|barrels?)\b", " ", rest))
             put = (named.removeprefix("minecraft:") if named else None) or find_item(rest) or find_ore(rest)
@@ -586,6 +608,10 @@ def route_chest(text):
     fresh = route_new_chest(text)
     if fresh:
         return fresh
+    made = find_craftable(text)
+    if made and ("chest" in made or "barrel" in made) and not re.search(
+            r"\b(from|out of|in|into|inside|with)\b (the |that |this |a |my |our )?(stuff (in|from) )?(chest|barrel)\b", text):
+        return None  # "make a chest boat" / "make a barrel": the container is what's made
     give = bool(GIVE_BACK.search(text))
     count = parse_count(text)
     text = fix_typos(text)
