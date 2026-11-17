@@ -845,8 +845,45 @@ class Mine(Task):
             if r.get("error"):
                 return
             self.ctx.recent_breaks.append((t[0], t[1], t[2], time.time()))
+            self.follow_vein(t, ore_of(snap.name(t)))
             time.sleep(0.6)
             self.ctx.collect(5, self)
+
+    SIDES6 = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+
+    def follow_vein(self, first, ore):
+        """Ores come in veins: after mining one, look into the hole it left. Every ore of
+        the same kind touching it gets mined (walking up to the hole to see in if need
+        be), then the ones touching those, like a player would clear a vein."""
+        ctx = self.ctx
+        done = {first}
+        todo = [first]
+        mined = 0
+        while todo and mined < 16 and not self.done():
+            hole = todo.pop(0)
+            snap = self.snap(hole, 2)
+            for d in self.SIDES6:
+                p = (hole[0] + d[0], hole[1] + d[1], hole[2] + d[2])
+                if p in done or ore_of(snap.name(p)) != ore:
+                    continue
+                done.add(p)
+                eye = tuple(ctx.state()["player"]["eye"])
+                if not (self.snap(p, 2).block_visible(eye, p, 5.0) and
+                        math.dist(eye, (p[0] + .5, p[1] + .5, p[2] + .5)) <= 4.4):
+                    # Step up to the hole and look in.
+                    ctx.body.call(f"goto {hole[0] + 0.5:.1f} {hole[1]:.1f} {hole[2] + 0.5:.1f} --near 1.4 --timeout 5")
+                    eye = tuple(ctx.state()["player"]["eye"])
+                    if not self.snap(p, 2).block_visible(eye, p, 5.0):
+                        continue  # can't see it from anywhere near: leave it
+                ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
+                if ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 12").get("error"):
+                    continue
+                ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))
+                mined += 1
+                todo.append(p)
+        if mined:
+            time.sleep(0.5)
+            ctx.collect(6, self)
 
     def wrap_up(self, ore):
         ctx = self.ctx
