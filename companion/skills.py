@@ -439,10 +439,28 @@ class Ctx:
         def tree(name):
             b = name.split("[", 1)[0]
             return b.endswith("_leaves") or b.endswith("_log") or b.endswith("_wood")
+        import journal
         acted = False
-        for _ in range(12):
+        stuck = 0
+        last_y = None
+        for _ in range(16):
             px, py, pz = p["position"]
             x, y, z = p["block_pos"]
+            if last_y is not None:
+                stuck = stuck + 1 if y >= last_y else 0
+            last_y = y
+            if stuck >= 2:
+                # Breaking underfoot isn't working: walk off the edge of the tree instead.
+                journal.log("note", "tree: breaking underfoot didn't drop me, stepping off the edge", y=y)
+                if self.step_off_tree(p, tree):
+                    stuck = 0
+                    acted = True
+                    try:
+                        p = self.state()["player"]
+                    except Exception:
+                        return acted
+                    continue
+                return acted
             col = self.senses.call(f"blocks {x} {y - 10} {z} {x} {y - 1} {z}").get("blocks", [])
             below = {b[1]: b[3] for b in col}
             if not tree(below.get(y - 1, "")):
@@ -463,7 +481,10 @@ class Ctx:
                     if n[0][3].split("[", 1)[0].endswith(("_log", "_wood")):
                         self.select_best(AXES)
                     self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
-                    self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 10")
+                    r = self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 10")
+                    if r.get("error"):
+                        journal.log("note", "tree: couldn't break underfoot", block=n[0][3].split("[")[0],
+                                    at=list(c), error=str(r["error"])[:200])
             acted = True
             self.body.call("wait 10")  # fall
             try:
@@ -471,6 +492,40 @@ class Ctx:
             except Exception:
                 return acted
         return acted
+    def step_off_tree(self, p, tree):
+        """Off the canopy's edge: the nearest open spot beside the tree at foot level (air
+        to walk into), walked to straight. A fall, but out of the tree."""
+        x, y, z = p["block_pos"]
+        box = self.senses.call(f"blocks {x - 4} {y - 1} {z - 4} {x + 4} {y + 1} {z + 4}").get("blocks", [])
+        filled = {(b[0], b[1], b[2]) for b in box if sight.blocks_body(b[3]) or tree(b[3])}
+        best = None
+        for dx in range(-4, 5):
+            for dz in range(-4, 5):
+                c = (x + dx, y, z + dz)
+                if (dx, dz) == (0, 0) or c in filled or (c[0], y + 1, c[2]) in filled                         or (c[0], y - 1, c[2]) in filled:
+                    continue
+                d = math.hypot(dx, dz)
+                if best is None or d < best[0]:
+                    best = (d, c)
+        if best is None:
+            return False
+        c = best[1]
+        self.say("I'm jumping for it!")
+        # Leaves in the way at foot or head height on the way there get broken.
+        steps = max(1, int(best[0] * 2))
+        for s in range(1, steps + 1):
+            f = s / steps
+            cx = math.floor(x + 0.5 + (c[0] - x) * f)
+            cz = math.floor(z + 0.5 + (c[2] - z) * f)
+            for cy in (y, y + 1):
+                if (cx, cy, cz) in filled and (cx, cz) != (x, z):
+                    self.body.call(f"look-at block {cx} {cy} {cz}")
+                    self.body.call(f"break {cx} {cy} {cz} --timeout 5")
+        self.body.call(f"goto {c[0] + 0.5:.2f} {y:.2f} {c[2] + 0.5:.2f} --near 0.3 --timeout 4 --direct")
+        self.body.call("move forward 0.4")
+        self.body.call("wait 30")  # the fall
+        return True
+
     def maybe_eat(self):
         try:
             food = self.state()["player"]["food"]
