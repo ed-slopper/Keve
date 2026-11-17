@@ -6,6 +6,7 @@ The game must already be running headless and joined to your world (start_keve.b
 does that). Keve reads chat, works out what you want, and does it.
 """
 import argparse
+import math
 import random
 import re
 import threading
@@ -33,9 +34,9 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue)})
+                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue")
+               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -137,8 +138,11 @@ class Keve:
         cur = getattr(self, "task", None)
         if skill == "cant" and cur is not None and cur.name != "idle" and not cur.done():
             return  # "faster keve": not an order Keve knows, so keep doing the job
+        if skill == "new_chest" and cur is not None and not cur.done() and cur.name == "gather"                 and cur.args.get("endless") and not args.get("resume"):
+            args = dict(args, resume=(cur.name, dict(cur.args)))  # store it, then keep chopping
         self.stop_task()
-        if skill not in ("give", "put", "stop", "cant", "idle", "status", "look", "jump", "come", "follow"):
+        if skill not in ("give", "put", "new_chest", "stop", "cant", "idle", "status", "look", "jump", "come", "follow",
+                         "handover"):
             self.ctx.made_batch = []  # a new job: 'them' will mean what this one makes
         if skill == "cant":
             skill, args = "idle", {}
@@ -216,7 +220,7 @@ class Keve:
             return None
         if len(out) == 1:
             return out[0]
-        words = {"dig_room": "dig out the room", "floor": "redo the floor", "wall": "redo the wall", "rescue": "dig you out","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+        words = {"dig_room": "dig out the room", "floor": "redo the floor", "wall": "redo the wall", "rescue": "dig you out", "new_chest": "make a chest","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
                  "come": "come back", "follow": "follow you", "give": "bring it over",
                  "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
                  "defend": "guard you", "plant": "plant it", "hunt": "hunt {mob}",
@@ -229,6 +233,61 @@ class Keve:
             except (KeyError, IndexError):
                 said.append(skill.replace("_", " "))
         return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
+    # --- double crouch: "hand me what you've got" ------------------------------------
+    def watch_sneaks(self):
+        """The skin proxy writes each shift press of yours to sneaks.txt. Two within
+        0.9 s while you're next to Keve: he hands over the job's items."""
+        path = life.MEMORY.parent / "sneaks.txt"
+        try:
+            pos = path.stat().st_size
+        except OSError:
+            pos = 0
+        presses = []
+        while not getattr(self, "closing", False):
+            time.sleep(0.2)
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            if size < pos:
+                pos = 0
+            if size == pos:
+                continue
+            with open(path, encoding="utf-8") as f:
+                f.seek(pos)
+                text = f.read()
+                pos = f.tell()
+            for row in text.splitlines():
+                who, _, t = row.partition(" ")
+                if who == self.name or (self.owner and who != self.owner):
+                    continue
+                try:
+                    t = float(t)
+                except ValueError:
+                    continue
+                presses = [p for p in presses if t - p < 0.9] + [t]
+                if len(presses) >= 2:
+                    presses = []
+                    try:
+                        self.on_double_crouch()
+                    except CtlError:
+                        pass
+
+    def on_double_crouch(self):
+        o = self.ctx.owner()
+        if not o or math.dist(self.ctx.eye_and_view()[3], o[1]) > 6:
+            return
+        ids = self.ctx.quest_items()
+        journal.log("note", "double crouch: hand over", items=ids)
+        if not ids:
+            self.say("nothing for you yet, buddy!")
+            return
+        cur = self.task
+        resume = None
+        if cur is not None and not cur.done() and cur.name not in ("idle", "give", "handover", "stay", "come"):
+            resume = (cur.name, dict(cur.args))
+        self.start_task("handover", {"items": ids, "resume": resume})
 
     def keep_named_item(self, original, skill, args):
         """The translator said 'put your stuff in the chest' for 'put the stone pic in the
@@ -441,6 +500,7 @@ class Keve:
             return
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
+        threading.Thread(target=self.watch_sneaks, daemon=True).start()
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
         print(f"[keve] this session's log: {journal.path()}")
         journal.log("note", f"Keve joined at {hello['player'].get('position')}", owner=self.owner)

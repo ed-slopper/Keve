@@ -397,6 +397,7 @@ class Mine(Task):
         self.wanted = {ore}
         self.deadline = time.time() + self.MAX_MINUTES * 60
         self.drop_names = {"minecraft:" + d for d in drops}
+        ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
         self.start_have = self.have()
         self.goal = want
         # 1. Tools: at least a stone pickaxe (iron comes from the mine itself).

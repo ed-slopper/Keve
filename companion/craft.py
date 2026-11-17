@@ -23,6 +23,7 @@ INGREDIENTS = {
     "raw_iron": lambda i: i == "minecraft:raw_iron",
     "crafting_table": lambda i: i == "minecraft:crafting_table",
     "furnace": lambda i: i == "minecraft:furnace",
+    "chest": lambda i: i == "minecraft:chest",
 }
 for _tool in ("wooden", "stone", "iron", "diamond", "golden", "netherite"):
     for _kind in ("pickaxe", "sword", "axe", "shovel", "hoe"):
@@ -38,6 +39,7 @@ RECIPES = {
     "crafting_table": (2, {0: "planks", 1: "planks", 2: "planks", 3: "planks"}, 1),
     "torch": (2, {0: "coal", 2: "stick"}, 4),
     "furnace": (3, {i: "cobble" for i in range(9) if i != 4}, 1),
+    "chest": (3, {i: "planks" for i in range(9) if i != 4}, 1),
 }
 for _tool, _mat in (("wooden", "planks"), ("stone", "cobble"), ("iron", "iron_ingot")):
     RECIPES[f"{_tool}_pickaxe"] = (3, {0: _mat, 1: _mat, 2: _mat, 4: "stick", 7: "stick"}, 1)

@@ -74,7 +74,9 @@ class Ctx:
         self.placed_stations = []  # tables Keve put down and will pack up when idle
         self.last_craft_time = 0.0
         self.last_item = None
-        self.made_batch = []      # everything made for the latest order: 'give them to me'     # what Keve last made or got: 'give it to me' means this
+        self.made_batch = []
+        self.quest_ok = None      # what the current job is collecting: a double crouch hands it over
+        self.store_chest = None   # a chest Keve made for the job: full pockets go in there      # everything made for the latest order: 'give them to me'     # what Keve last made or got: 'give it to me' means this
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
         self.last_item = None     # what it gathered last ("bring them to me")
         self.provoked = {}        # mob type -> when it last hurt Keve or you
@@ -217,6 +219,13 @@ class Ctx:
             self.body.call(f"click-slot {s['slot']}")
             self.body.call("close")  # a stack held on the cursor is thrown when it closes
 
+    def quest_items(self):
+        """Item ids Keve carries that belong to the job: what it's gathering or mining,
+        and what it made for the latest order."""
+        ok = self.quest_ok
+        return [i for i, n in self.counts().items()
+                if n > 0 and ((ok is not None and ok(i)) or i in self.made_batch)]
+
     def select_best(self, short_names):
         n = self.has(short_names)
         if n:
@@ -350,6 +359,9 @@ class Ctx:
                            for r in self.recent_breaks)
 
             items = [e for e in items if known(e)]
+            o = self.owner()
+            if o:  # what lies at your feet is yours (Keve may just have handed it over)
+                items = [e for e in items if math.dist(e["pos"], o[1]) > 2.0]
             if not items:
                 break
             it = min(items, key=lambda e: e["distance"])
@@ -615,6 +627,7 @@ class Gather(Task):
         what = self.args.get("item", "wood")
         want = int(self.args.get("count", 10))
         block_ok, item_ok = GATHER[what]
+        self.ctx.quest_ok = item_ok
         ctx = self.ctx
         shown = what.replace("_", " ")
 
@@ -689,6 +702,25 @@ class Gather(Task):
                 ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
                 continue
             if what == "wood":
+                # Like a player: knock out the bottom of the trunk, step into its spot, and
+                # chop straight up. The logs drop on Keve's head instead of rolling off.
+                n = self.fell_tree(t, block_ok)
+                if self.done():
+                    return
+                if n == 0:
+                    ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
+                    continue
+                breaks += n
+                time.sleep(0.6)
+                ctx.collect(6, self)
+                if self.args.get("endless") and breaks // 16 != (breaks - n) // 16:
+                    if self.endless_check(what, shown, have, start) == "stop":
+                        return
+                    start = getattr(self, "_restart", start)
+                ctx.look_around(block_ok, pitches=(-40.0, 0.0))
+                ctx.maybe_eat()
+                continue
+            if what == "wood":
                 ctx.select_best(AXES)
             elif what in NEEDS_PICKAXE:
                 ctx.select_best(PICKAXES)
@@ -703,13 +735,9 @@ class Gather(Task):
             ctx.recent_breaks.append((t[0], t[1], t[2], time.time()))
             breaks += 1
             if self.args.get("endless") and breaks % 16 == 0:
-                inv = ctx.body.call("inventory")
-                used = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
-                if len(used) >= 35:
-                    ctx.say(f"my pockets are FULL! {have() - start} {shown} so far. "
-                            f"take some, or tell me to put my stuff in the chest.")
+                if self.endless_check(what, shown, have, start) == "stop":
                     return
-                ctx.say(f"{have() - start} {shown} and counting!")
+                start = getattr(self, "_restart", start)
             # Pick up the drop. A fresh drop can't be picked up for 10 ticks (0.5 s), so
             # wait that out first; sand and gravel can also fall and drops can roll.
             time.sleep(0.7)
@@ -719,6 +747,83 @@ class Gather(Task):
             # Look up and around the broken spot: the log above is visible now.
             ctx.look_around(block_ok, pitches=(-40.0, 0.0))
             ctx.maybe_eat()
+
+
+    def endless_check(self, what, shown, have, start):
+        """Every 16 blocks of a nonstop job: say the count; full pockets go in the job's
+        chest if there is one (then carry on), else stop. 'stop' when the job should end."""
+        ctx = self.ctx
+        inv = ctx.body.call("inventory")
+        used = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
+        if len(used) >= 35 and ctx.store_chest:
+            ctx.say(f"pockets full! dropping the {shown} off in the chest.")
+            import containers
+            t = containers.PutInChest(ctx, item=what, pos=ctx.store_chest)
+            t.cancelled = self.cancelled
+            t.run()
+            self._restart = have()
+            return "go"
+        if len(used) >= 35:
+            ctx.say(f"my pockets are FULL! {have() - start} {shown} so far. "
+                    f"take some, or tell me to make a chest for them.")
+            return "stop"
+        ctx.say(f"{have() - start} {shown} and counting!")
+        return "go"
+
+    def fell_tree(self, t, block_ok):
+        """Chop one trunk column the way a player does: break the bottom one or two logs
+        from the side, step into the gap, then break straight up as far as Keve reaches.
+        How many logs came down."""
+        ctx = self.ctx
+        x, _, z = t
+        snap = sight.Snapshot.read(ctx.senses, t, rh=2, rv=8)
+        base = t[1]
+        while block_ok(snap.name((x, base - 1, z))) and base > t[1] - 8:
+            base -= 1
+        broken = 0
+
+        def chop(p):
+            ctx.select_best(AXES)
+            ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
+            r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 15")
+            if r.get("error"):
+                return False
+            ctx.memory.pop(p, None)
+            ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))
+            return True
+
+        for y in (base, base + 1):
+            p = (x, y, z)
+            if not block_ok(sight.Snapshot.read(ctx.senses, p, rh=1, rv=1).name(p)):
+                break
+            if self.done():
+                return broken
+            if math.dist(ctx.eye_and_view()[0], (x + .5, y + .5, z + .5)) > 4.3:
+                ctx.body.call(f"goto {x + 0.5:.1f} {base:.1f} {z + 0.5:.1f} --near 2.5 --timeout 10")
+            if not chop(p):
+                return broken
+            broken += 1
+        if broken == 0 or not sight.blocks_body(snap.name((x, base - 1, z))):
+            return broken  # a lone log, or the trunk doesn't stand on the ground
+        # Step into the trunk's spot (both blocks are open now) and work upward.
+        ctx.body.call(f"goto {x + 0.5:.2f} {base:.2f} {z + 0.5:.2f} --near 0.3 --timeout 4 --direct")
+        me = ctx.state()["player"]["block_pos"]
+        if (me[0], me[2]) != (x, z):
+            return broken  # couldn't get under it: the next pass takes what's left
+        for y in range(base + 2, base + 12):
+            if self.done():
+                return broken
+            p = (x, y, z)
+            eye = ctx.eye_and_view()[0]
+            if math.dist(eye, (x + .5, y + .5, z + .5)) > 4.5:
+                break  # out of reach: the rest of a tall tree comes later
+            s = sight.Snapshot.read(ctx.senses, p, rh=1, rv=1)
+            if not block_ok(s.name(p)) or not s.block_visible(eye, p, 5.0):
+                break
+            if not chop(p):
+                break
+            broken += 1
+        return broken
 
 
 ANIMAL_WORDS = {
@@ -977,4 +1082,23 @@ HELP_LINES = [
     "give me your sand / give me everything / what you got / or just talk to me.",
 ]
 
-SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Hunt, Defend, Status, Jump, LookAtMe, Help)}
+class HandOver(Task):
+    """You crouched twice next to Keve: he drops what he's got for the job (the wood he's
+    chopping, what he made for you), then carries on with the job."""
+    name = "handover"
+
+    def run(self):
+        ctx = self.ctx
+        import brain
+        ctx.say(brain.line("handover", "here, catch!"))
+        Give(ctx, items=self.args.get("items")).run_inner(self)
+        resume = self.args.get("resume")
+        if resume and not self.done():
+            skill, args = resume
+            t = SKILLS[skill](ctx, **args)
+            t.cancelled = self.cancelled
+            t.run()
+
+
+SKILLS = {c.name: c for c in (Come, Follow, Stay, Idle, Gather, Give, Hunt, Defend, Status, Jump, LookAtMe,
+                              Help, HandOver)}

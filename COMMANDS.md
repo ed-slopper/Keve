@@ -39,6 +39,8 @@ Numbers can be words: "a few", "some", "ten", "a stack". With no number it gets 
 | `keve mine for diamonds` / `keve get me 3 diamonds` | Goes all the way: makes its tools, digs a staircase down to y -58, takes the iron it sees on the way, smelts it into an iron pickaxe, branch-mines and comes back up |
 | (staircases) | Keve remembers every staircase he digs and marks the first one as "mine". On the next trip near one, or near a place you called a mine, he walks down the old stairs and digs on from the bottom |
 | `keve chop trees until i say stop` / `keve mine trees forever` / `keve get sand nonstop` | Keeps going until you say stop or his pockets are full, telling you the count every 16 blocks |
+| `keve make a chest and put the wood in it` / `keve make a new chest out here for the logs` | Crafts a chest (or uses one he has), puts it down where he is and fills it. During a nonstop job it becomes the job chest: when his pockets fill up, he empties them there and keeps going |
+| *crouch twice quickly next to Keve* | He hands you what he has for the job (the wood he is chopping, what he made for you), then gets back to it. This needs you joined through the skin proxy, which is the default |
 | `keve get me 10 iron` / `keve go mine some coal` / `keve find gold` | The same for iron (y 16), coal, copper, lapis, gold, redstone and emerald |
 | `keve go mining` | Iron, by default |
 | `... and bring them to me` | Hands over what it found when it's back |

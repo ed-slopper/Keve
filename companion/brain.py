@@ -169,6 +169,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "new_chest": "Make a new chest, put it down here, and store things in it",
         "rescue": "Dig the player out when they are stuck or trapped",
         "wall": "Replace the wall or walls of the room with a block",
         "floor": "Replace or redo the floor of the room with a block",
@@ -339,6 +340,9 @@ def route_gather_more(text):
 
 
 def reflex_route(text):
+    fresh = route_new_chest(text)
+    if fresh:
+        return fresh
     more = route_gather_more(text)
     if more:
         return more
@@ -386,8 +390,13 @@ def find_craftable(text):
     """'make me a stone pickaxe' -> 'stone_pickaxe'; '16 torches' -> 'torch'."""
     t = " " + fix_typos(text) + " "
     mat = None
+    # The material right before the tool word wins ("a chest for the wood, and stone axes").
+    near = re.search(r"\b(wood(?:en)?|stone|cobble(?:stone)?|iron|diamond|gold(?:en)?)\s+(pickaxe|sword|axe|shovel|hoe)", t)
+    if near:
+        w = near.group(1)
+        mat = "wooden" if w.startswith("wood") else "stone" if w.startswith(("stone", "cobble")) else             "golden" if w.startswith("gold") else w
     for m, w in (("wooden", r"\bwood(en)?\b"), ("stone", r"\bstone\b|\bcobble"), ("iron", r"\biron\b")):
-        if re.search(w, t):
+        if mat is None and re.search(w, t):
             mat = m
             break
     for tool in ("pickaxe", "sword", "axe", "shovel", "hoe"):
@@ -533,10 +542,33 @@ def route_block(text):
     return None
 
 
+NEW_CHEST = re.compile(r"\b(make|craft|build|place|put down|set down|set up|get out|need)\b(\s+(me|us))?\s+"
+                       r"(a |an |another |a new |new |one more |a second )?(chest|barrel)\b")
+
+
+def route_new_chest(text):
+    """'make a chest and store the wood in it' -> craft, place here, fill with wood."""
+    if not NEW_CHEST.search(text) or re.search(r"\b(from|out of) (the|that|this) chest\b", text):
+        return None
+    put = None
+    m = re.search(r"\b(store|put|keep|stash|dump|stick|for)\b(.*)$", text)
+    if m:
+        rest = m.group(2)
+        if re.search(r"\b(stuff|everything|all|things|items|inventory)\b", rest):
+            put = "*"
+        else:
+            named = named_item(re.sub(r"\b(chests?|barrels?)\b", " ", rest))
+            put = (named.removeprefix("minecraft:") if named else None) or find_item(rest) or find_ore(rest)
+    return "new_chest", {"put": put}
+
+
 def route_chest(text):
     """Orders about a chest or barrel: take from it, put into it, craft from it."""
     if not re.search(r"\b(chests?|barrels?)\b", text):
         return None
+    fresh = route_new_chest(text)
+    if fresh:
+        return fresh
     give = bool(GIVE_BACK.search(text))
     count = parse_count(text)
     text = fix_typos(text)

@@ -148,7 +148,9 @@ class PutInChest(Task):
         ctx = self.ctx
         word = self.args.get("item")
         ch = Chests(ctx, self)
-        pos = ch.find()
+        pos = tuple(self.args["pos"]) if self.args.get("pos") else ch.find()
+        if pos is not None and math.dist(ctx.eye_and_view()[3], pos) > 12:
+            ctx.walk_to(pos, near=2.5, timeout=30, task=self)  # the job's chest, back where it was put
         if pos is None:
             ctx.say("I don't see a chest near you.")
             return
@@ -188,3 +190,49 @@ def take_for_recipe(ctx, task, item, quiet=False):
     if got or not quiet:
         ctx.say(f"grabbed {got} things from the chest." if got else "nothing in that chest I can use.")
     return got > 0
+
+
+class NewChest(Task):
+    """'keve make a chest and store the wood in it' / 'make a new chest out here for the logs':
+    craft one (or use one he carries), put it down right where Keve is, and fill it.
+    It becomes the job's chest: when his pockets fill up during the job, they go in there."""
+    name = "new_chest"
+
+    def run(self):
+        ctx = self.ctx
+        import mining
+        prov = mining.Provision(ctx, self)
+        prov.goal = None
+        try:
+            ok = prov.ensure("chest", 1)
+        except RuntimeError as e:
+            ctx.say(f"couldn't make a chest: {e}")
+            return
+        if not ok:
+            if not self.done():
+                ctx.say("I can't make a chest right now, I need 8 planks.")
+            return
+        spot, last = None, "no room"
+        for s in prov.crafter.free_spots():
+            r = ctx.place(s, "chest")
+            if not r.get("error"):
+                spot = tuple(s)
+                break
+            last = r["error"]
+        if spot is None:
+            ctx.say(f"couldn't put the chest down ({last}).")
+            return
+        ctx.store_chest = spot
+        ctx.say(f"new chest at {spot[0]} {spot[1]} {spot[2]}!")
+        put = self.args.get("put")
+        if put and not self.done():
+            t = PutInChest(ctx, item=None if put == "*" else put, pos=spot)
+            t.cancelled = self.cancelled
+            t.run()
+        resume = self.args.get("resume")
+        if resume and not self.done():
+            from skills import SKILLS
+            skill, args = resume
+            t = SKILLS[skill](ctx, **args)
+            t.cancelled = self.cancelled
+            t.run()

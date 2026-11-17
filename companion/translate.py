@@ -24,7 +24,7 @@ keve mine this coal | keve break that glass | keve dig this dirt | keve chop tha
 keve open that door | keve pull the lever | keve press the button
 keve place a crafting table | keve place a furnace | keve plant a sapling | keve plant 3 oak saplings | keve plant the seeds
 keve make a stone pickaxe | keve make a stone sword | keve make a stone hoe | keve make an iron axe | keve craft 16 torches | keve make a furnace | keve make a crafting table
-keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest | keve put the stone pickaxe in the chest | keve give me the stone pickaxe
+keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest | keve put the stone pickaxe in the chest | keve make a chest and put the wood in it | keve give me the stone pickaxe
 keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some leather | keve defend me
 keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks | keve dig me out |
 keve place torches in this room | keve what do you see | keve what you got | keve help
@@ -78,6 +78,8 @@ Examples:
 "make all the stone tools and put them in the chest" -> {{"addressed": true, "commands": ["keve make a stone pickaxe", "keve make a stone axe", "keve make a stone shovel", "keve make a stone hoe", "keve make a stone sword", "keve put the stone tools in the chest"], "chat": false}}
 "keve mine trees until i say" -> {{"addressed": true, "commands": ["keve chop trees until i say stop"], "chat": false}}
 "give them to me" (Keve just made a stone sword, axe and hoe) -> {{"addressed": true, "commands": ["keve give me the stone sword", "keve give me the stone axe", "keve give me the stone hoe"], "chat": false}}
+"make a chest and store the wood in it" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it"], "chat": false}}
+"make a new chest outside there for the wood, also make new stone axes as u need" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it", "keve make a stone axe"], "chat": false}}
 "faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}

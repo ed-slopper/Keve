@@ -10,13 +10,18 @@ through it; the server only listens on 127.0.0.1.
 Forwarding, as Horizon reads it: the server sends login plugin request 0x04 on
 `velocity:player_info`; the proxy answers with login plugin response 0x02 whose data is
 HMAC-SHA256(secret, payload) + payload, payload = version 1, address, UUID, name,
-properties. After that, bytes are passed through untouched.
+properties. After that, bytes are passed through untouched, except that the proxy also
+reads (never changes) what your game sends, to see when you press shift: two quick taps
+near Keve mean "hand me what you got". Those go to sneaks.txt in Keve's folder.
 """
 import asyncio
 import hashlib
 import hmac
 import json
+import os
 import time
+import zlib
+from pathlib import Path
 import urllib.request
 import uuid as uuidlib
 
@@ -157,7 +162,9 @@ class SkinProxy:
                             break
                     cwriter.write(raw)
                     await cwriter.drain()
-            await asyncio.gather(self.pipe(creader, swriter), self.pipe(sreader, cwriter))
+            conn = {"compressed": False, "sneaking": False, "name": name if next_state in (2, 3) else None}
+            await asyncio.gather(self.watch_client(creader, swriter, conn),
+                                 self.watch_server(sreader, cwriter, conn))
         except (asyncio.IncompleteReadError, ConnectionError, OSError, IndexError):
             pass
         finally:
@@ -166,6 +173,69 @@ class SkinProxy:
                     w.close()
                 except Exception:
                     pass
+
+    # --- watching for shift taps (read only) -----------------------------------------
+    PLAYER_INPUT = 43  # serverbound play: one byte of input flags (Horizon 26.3, protocol 777)
+    SHIFT = 0x20
+    SNEAKS = Path(os.environ.get("KEVE_HOME") or Path(os.environ.get("LOCALAPPDATA", ".")) / "Keve") / "sneaks.txt"
+
+    async def watch_server(self, reader, writer, conn):
+        """Server to you: read the last login packets to learn whether compression is on,
+        then pass everything through as plain bytes."""
+        try:
+            while conn["name"]:
+                raw, body = await read_packet(reader)
+                pid, j = read_varint(body, 0)
+                writer.write(raw)
+                await writer.drain()
+                if pid == 0x03:  # set compression: everything after is in the compressed format
+                    conn["compressed"] = True
+                    break
+                if pid == 0x02:  # login finished without compression
+                    break
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, IndexError):
+            writer.close()
+            return
+        await self.pipe(reader, writer)
+
+    async def watch_client(self, reader, writer, conn):
+        """You to the server: forward each packet as it is, and note shift presses."""
+        if not conn["name"]:
+            await self.pipe(reader, writer)
+            return
+        try:
+            while True:
+                raw, body = await read_packet(reader)
+                writer.write(raw)
+                await writer.drain()
+                try:
+                    self.note_input(body, conn)
+                except (IndexError, zlib.error):
+                    pass  # not a packet we understand: it went through untouched anyway
+        except (asyncio.IncompleteReadError, ConnectionError, OSError):
+            pass
+        finally:
+            try:
+                writer.close()
+            except Exception:
+                pass
+
+    def note_input(self, body, conn):
+        i = 0
+        if conn["compressed"]:
+            size, i = read_varint(body, 0)
+            data = body[i:] if size == 0 else zlib.decompress(body[i:])
+        else:
+            data = body
+        pid, j = read_varint(data, 0)
+        if pid != self.PLAYER_INPUT or len(data) != j + 1:
+            return
+        sneaking = bool(data[j] & self.SHIFT)
+        if sneaking and not conn["sneaking"]:
+            self.SNEAKS.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.SNEAKS, "a", encoding="utf-8") as f:
+                f.write(f"{conn['name']} {time.time():.3f}" + chr(10))
+        conn["sneaking"] = sneaking
 
     @staticmethod
     async def pipe(reader, writer):
