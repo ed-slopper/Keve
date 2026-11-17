@@ -306,6 +306,28 @@ class WhisperEars:
 
 
 # --- the whole voice ---------------------------------------------------------------------
+def strip_echo(heard, said_lines, run=3):
+    """`heard` with every run of `run`+ words from Keve's own recent lines taken out.
+    None when what's left is too little to be you talking (under 3 words)."""
+    words = heard.split()
+    if not words or not said_lines:
+        return heard
+    said = [s.split() for s in said_lines]
+    grams = set()
+    for s in said:
+        for i in range(len(s) - run + 1):
+            grams.add(tuple(s[i:i + run]))
+    drop = [False] * len(words)
+    for i in range(len(words) - run + 1):
+        if tuple(words[i:i + run]) in grams:
+            for k in range(i, i + run):
+                drop[k] = True
+    if not any(drop):
+        return heard
+    left = [w for w, d in zip(words, drop) if not d]
+    return " ".join(left) if len(left) >= 3 else None
+
+
 class Voice:
     """Ears and a mouth with a queue, so speaking never blocks the game loop."""
 
@@ -354,11 +376,16 @@ class Voice:
         import difflib
         plain = re.sub(r"[^\w\s]", "", text.lower()).strip()
         now = time.time()
-        self.recent = [(t, s) for t, s in getattr(self, "recent", []) if now - t < 30]
+        self.recent = [(t, s) for t, s in getattr(self, "recent", []) if now - t < 45]
         for _, said in self.recent:
             if plain and (plain in said or difflib.SequenceMatcher(None, plain, said).ratio() > 0.7):
                 return
-        self.on_heard(text)
+        # The mic often runs several of Keve's lines together, with a few of yours in
+        # between: take out every run of 3+ words Keve said, keep what's left (if anything).
+        rest = strip_echo(plain, [s for _, s in self.recent])
+        if rest is None:
+            return
+        self.on_heard(text if rest == plain else rest)
 
     def say(self, text):
         if self.mouth:

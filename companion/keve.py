@@ -275,6 +275,9 @@ class Keve:
                         pass
 
     def on_double_crouch(self):
+        if time.time() - getattr(self, "last_handover", 0) < 4:
+            return  # a third tap of the same crouch, or one already being handled
+        self.last_handover = time.time()
         o = self.ctx.owner()
         if not o or math.dist(self.ctx.eye_and_view()[3], o[1]) > 6:
             return
@@ -285,7 +288,9 @@ class Keve:
             return
         cur = self.task
         resume = None
-        if cur is not None and not cur.done() and cur.name not in ("idle", "give", "handover", "stay", "come"):
+        if cur is not None and cur.name == "handover":
+            resume = cur.args.get("resume")  # mid hand-over: keep the job it'll go back to
+        elif cur is not None and not cur.done() and cur.name not in ("idle", "give", "stay", "come"):
             resume = (cur.name, dict(cur.args))
         self.start_task("handover", {"items": ids, "resume": resume})
 

@@ -330,7 +330,16 @@ def route_gather_more(text):
         return None
     item = "wood" if TREES.search(text) or re.search(r"\b(chop|chopping|cut|cutting|fell)\b", text)         else find_item(text)
     if item is None:
-        return None
+        # Any other block by name ("mine grass nonstop", "dig moss forever").
+        if not ENDLESS.search(text):
+            return None
+        import world_names
+        names = world_names.names()
+        ids, label = names.blocks_in(text) if names else (set(), None)
+        if not ids:
+            return None
+        return "break", {"ids": sorted(ids), "label": label, "count": 100000, "near_owner": False,
+                         "endless": True}
     if ENDLESS.search(text):
         return "gather", {"item": item, "count": 100000, "endless": True,
                           "max_seconds": 4 * 3600, "max_explores": 100000,
@@ -341,6 +350,8 @@ def route_gather_more(text):
 
 
 def reflex_route(text):
+    # "...until I say stop" names when to stop, it isn't the stop itself.
+    text = re.sub(r"\buntil i (say|tell( you)?)( to)? (stop|so)\b", "until i say so", text)
     more = route_gather_more(text)
     if more and more[1].get("endless"):
         return more  # "chop trees nonstop and put it in a new chest": the chest comes with the job
@@ -535,6 +546,8 @@ def route_block(text):
         trip = ore and not deictic and (re.search(r"\b(for|deep|underground|mining|caves?)\b", text) or (count or 0) >= 2)
         if trip:
             return None  # a mining trip: the ore route takes it
+        if count is None and re.search(r"\b(mine|dig|clear) (it |them )?(out|up|away)\b|\ball (the|of the)\b", text):
+            count = 16  # "mine out the grass": a patch of it, not one block
         return "break", {"ids": sorted(ids), "label": label, "count": count or 1,
                          "near_owner": deictic or not count}
     if re.search(r"\b(get|grab|collect|gather|fetch|bring)\b", text) and not find_item(text) and not find_ore(text):

@@ -589,7 +589,7 @@ class Idle(Stay):
     """What Keve does between orders: stand by, fight back, and once nothing's been crafted
     for a while, pack up the crafting table he left out."""
     name = "idle"
-    PACK_AFTER = 40
+    PACK_AFTER = 20
 
     def run(self):
         ctx = self.ctx
@@ -652,8 +652,9 @@ class Gather(Task):
                     ctx.say(f"I could only get {got} {shown}, the rest is out of reach." if got else
                             f"I can't reach any {shown} from here.")
                 return
-            # Don't keep digging while something is eating it.
-            if self.guard(owner_radius=0.0, self_radius=4.0):
+            # Don't keep digging while something is eating it (on a nonstop job, help you
+            # with yours too), then carry on.
+            if self.guard(owner_radius=8.0 if self.args.get("endless") else 0.0, self_radius=4.0):
                 continue
             got = have()
             if got >= goal or breaks >= max_breaks:

@@ -86,8 +86,20 @@ class BreakBlocks(Task):
                         ctx.say(f"I can't make the pickaxe {label} needs yet.")
                     return
         done = 0
+        endless = self.args.get("endless")
+        explores = 0
         while done < want and not self.done():
+            if endless and self.guard(owner_radius=8.0, self_radius=5.0):
+                continue  # help with the fight, then back to it
             p = find_target(ctx, self, ids, near_owner)
+            if p is None and endless and explores < 300:
+                explores += 1  # none in sight: wander a bit and look again
+                import random
+                pos = ctx.eye_and_view()[3]
+                ang = random.uniform(0, 2 * math.pi)
+                ctx.body.call(f"goto {pos[0] + 12 * math.cos(ang):.1f} {pos[1]:.1f} "
+                              f"{pos[2] + 12 * math.sin(ang):.1f} --near 3 --timeout 12 --direct")
+                continue
             if p is None:
                 break
             walk_to_reach(ctx, p)
@@ -101,6 +113,12 @@ class BreakBlocks(Task):
                 ctx.say(f"couldn't break that {label}: {r['error'].split(';')[0]}")
                 break
             done += 1
+            if endless and done % 16 == 0:
+                inv = ctx.body.call("inventory")
+                if len([s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]) >= 35:
+                    ctx.say(f"my pockets are FULL! {done} {label} so far.")
+                    return
+                ctx.say(f"{done} {label} and counting!")
             ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))
             time.sleep(0.8)
             if not ctx.collect(5, self):

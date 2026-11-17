@@ -110,6 +110,21 @@ class Names:
             for tag in (us + "_ores", us + "s", us, GROUP_WORDS.get(ph, "")):
                 if tag and self.tag(tag):
                     return set(self.tag(tag)), ph
+        # Nothing by its full name: what people call it for short. "grass" is the grass
+        # block, "moss" the moss block; "concrete" is every colour of concrete.
+        for ph in self._phrases(text):
+            if ph + " block" in self.by_name:
+                return set(self.by_name[ph + " block"]), ph
+        for ph in self._phrases(text):
+            if " " in ph or len(ph) < 3:
+                continue
+            ids = set()
+            for name, bs in self.by_name.items():
+                parts = name.split()
+                if len(parts) > 1 and (parts[-1] == ph or parts[0] == ph):
+                    ids |= bs
+            if ids and len(ids) <= 24:
+                return ids, ph
         return set(), None
 
     def item_in(self, text):

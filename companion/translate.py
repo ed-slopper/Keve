@@ -20,7 +20,7 @@ keve follow me | keve come here | keve stay | keve stop | keve jump | keve look 
 keve get 10 wood | keve chop trees until i say stop | keve get 5 dirt | keve get 8 sand | keve get some gravel | keve get 20 stone | keve get sugar cane | keve get 3 pumpkins | keve get clay
 keve get 10 wood and bring it to me | keve bring me the sand (hand over what it has) | keve give me everything | keve give me a stone pickaxe | keve give me 16 torches
 keve mine for diamonds | keve mine 10 iron | keve mine some coal | keve go mining
-keve mine this coal | keve break that glass | keve dig this dirt | keve chop that birch log | keve get me 10 andesite
+keve mine this coal | keve mine out the grass | keve mine grass until i say stop | keve break that glass | keve dig this dirt | keve chop that birch log | keve get me 10 andesite
 keve open that door | keve pull the lever | keve press the button
 keve place a crafting table | keve place a furnace | keve plant a sapling | keve plant 3 oak saplings | keve plant the seeds
 keve make a stone pickaxe | keve make a stone sword | keve make a stone hoe | keve make an iron axe | keve craft 16 torches | keve make a furnace | keve make a crafting table
@@ -55,6 +55,7 @@ Rules:
 - Doing something "until I say", "forever", "nonstop" keeps those words: "keve chop trees until i say stop".
 - "them"/"those" with give/put means the things Keve just made, one command each; "give me everything" only when the player says everything/all.
 - "it"/"that" with give/put means what Keve just made or got (given in "Right now").
+- Any block works by its name (grass, moss, mud, concrete, deepslate...): keep the player's block word.
 - Never output placeholders like [item] or <item>. If you don't know the item, use the closest real one or leave it out.
 - addressed: is the player talking to Keve (true) or to someone else / themselves (false)?
 
@@ -81,6 +82,7 @@ Examples:
 "give them to me" (Keve just made a stone sword, axe and hoe) -> {{"addressed": true, "commands": ["keve give me the stone sword", "keve give me the stone axe", "keve give me the stone hoe"], "chat": false}}
 "make a chest and store the wood in it" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it"], "chat": false}}
 "make a new chest outside there for the wood, also make new stone axes as u need" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it", "keve make a stone axe"], "chat": false}}
+"keve get a stone shovel and mine out the grass" -> {{"addressed": true, "commands": ["keve make a stone shovel", "keve mine out the grass"], "chat": false}}
 "faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}

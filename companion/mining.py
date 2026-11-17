@@ -263,6 +263,9 @@ class Craft(Task):
         if ok:
             self.ctx.last_item = "minecraft:" + item
             self.ctx.made_batch.append("minecraft:" + item)
+            o = self.ctx.owner()
+            if o:
+                self.ctx.body.call(f"look-at entity {o[0]}")  # done at the table: back to you
             self.ctx.say(f"made {shown}!" if count == 1 else f"made {count} {shown}!")
             if self.args.get("give"):
                 Give(self.ctx, item=None, items=[item]).run_inner(self)
