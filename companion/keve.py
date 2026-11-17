@@ -627,6 +627,8 @@ class Keve:
                 elif kind == "death":
                     journal.log("event", "Keve died", detail=ev)
                     resume = self.job_to_resume()
+                    if ev.get("position"):
+                        life.note_danger(ev["position"], ev.get("cause") or "died")
                     self.stop_task()
                     try:
                         self.ctrl.call("respawn")

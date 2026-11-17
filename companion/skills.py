@@ -321,6 +321,7 @@ class Ctx:
     def on_hurt(self, event):
         """Keve got hurt: remember who did it (neutral mobs fight back when provoked)."""
         text = str(event).lower()
+        self.hits = [t for t in getattr(self, "hits", []) if time.time() - t < 6] + [time.time()]
         if "arrow" in text or "trident" in text:
             self.shot_at = time.time()  # an archer somewhere out there: look further for it
         for kind in NEUTRAL | HOSTILE:
@@ -333,6 +334,10 @@ class Ctx:
         if near:
             kind = min(near, key=lambda e: e["distance"])["type"].removeprefix("minecraft:")
             self.provoked[kind] = time.time()
+
+    def under_attack(self):
+        """Hit twice in the last few seconds: something's on him, seen or not."""
+        return len([t for t in getattr(self, "hits", []) if time.time() - t < 4]) >= 2
 
     def visible_hostiles(self, around, radius):
         eye, yaw, pitch, _ = self.eye_and_view()
@@ -593,6 +598,13 @@ class Task:
         targets = ctx.visible_hostiles(pos, self_radius)
         if o:
             targets += ctx.visible_hostiles(o[1], owner_radius)
+        if not targets and ctx.under_attack():
+            # Getting hit by something he can't see (behind him, round a corner of the
+            # stairs): he feels it, so he turns on whatever is right next to him.
+            near = [e for e in ctx.senses.call("entities 4").get("entities", [])
+                    if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:") in HOSTILE | NEUTRAL]
+            if near:
+                targets = [min(near, key=lambda e: e["distance"])]
         if not targets and time.time() - getattr(ctx, "shot_at", 0) < 5:
             # Shot at: the archer is further off. Go get it (if he's not too hurt for it).
             try:

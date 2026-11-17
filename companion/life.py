@@ -29,6 +29,28 @@ def save_memory(mem):
     MEMORY.write_text(json.dumps(mem, indent=1), encoding="utf-8")
 
 
+# --- dangerous places: where Keve died or nearly did ----------------------------------
+DANGER_HOURS = 12
+
+
+def note_danger(pos, why):
+    mem = load_memory()
+    now = time.time()
+    spots = [d for d in mem.get("danger", []) if now - d["t"] < DANGER_HOURS * 3600]
+    spots.append({"pos": [round(v, 1) for v in pos], "why": why, "t": now})
+    mem["danger"] = spots[-40:]
+    save_memory(mem)
+
+
+def dangers():
+    now = time.time()
+    return [d for d in load_memory().get("danger", []) if now - d["t"] < DANGER_HOURS * 3600]
+
+
+def near_danger(pos, radius=6.0, spots=None):
+    return any(math.dist(d["pos"], pos) <= radius for d in (dangers() if spots is None else spots))
+
+
 class SetHome(Task):
     """'keve this is home' / 'keve remember this as the mine': where you're standing."""
     name = "set_home"
@@ -348,6 +370,9 @@ class Recover(Task):
     def run(self):
         ctx = self.ctx
         where = self.args.get("where")
+        if where and len([d for d in dangers() if math.dist(d["pos"], where) < 8]) >= 2:
+            ctx.say("I keep dying back there, my stuff isn't worth it. leaving it!")
+            where = None
         if where and math.dist(ctx.eye_and_view()[3], where) < 300:
             ctx.say("going back for my stuff!")
             for _ in range(12):

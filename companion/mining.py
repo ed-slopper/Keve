@@ -359,6 +359,12 @@ class Mine(Task):
         ctx = self.ctx
         here = ctx.state()["player"]["position"]
         near = [m for m in self.known_mines() if math.dist(m["top"], here) <= self.NEAR_MINE]
+        import life
+        spots = life.dangers()
+        risky = [m for m in near if any(life.near_danger(p, 6, spots) for p in m.get("path", []))]
+        if risky:
+            ctx.say("my old stairs go right past where I got hurt, I'm digging fresh ones.")
+            near = [m for m in near if m not in risky]
         if not near:
             return False
         m = min(near, key=lambda m: math.dist(m["top"], here))
@@ -383,7 +389,13 @@ class Mine(Task):
                 return True
             if wp[1] < best_y - 1:
                 break
-            r = ctx.body.call(f"goto {wp[0] + 0.5:.2f} {wp[1]:.2f} {wp[2] + 0.5:.2f} --near 1.2 --timeout 10")
+            # Short legs with a look round between: something coming up the stairs is
+            # dealt with (or run from) instead of walked into blind.
+            if self.guard(owner_radius=0.0, self_radius=6.0):
+                continue
+            if ctx.state()["player"].get("health", 20) <= 8:
+                return True  # the trip's own checks heal him or call it off
+            r = ctx.body.call(f"goto {wp[0] + 0.5:.2f} {wp[1]:.2f} {wp[2] + 0.5:.2f} --near 1.2 --timeout 4")
             if not r.get("arrived") and math.dist(ctx.state()["player"]["position"], wp) > 2.5:
                 break  # caved in or blocked: dig on from here
         self.follow_open_stairs(best_y)
@@ -454,10 +466,17 @@ class Mine(Task):
         if not self.reuse_staircase(best_y) or self.track is None:
             self.track = {"top": list(ctx.state()["player"]["position"]), "path": [], "dir": list(self.dir)}
         # 2. Staircase down to the ore's level (taking ores seen on the way).
+        blocked = 0
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
             if not self.stair_step():
+                blocked += 1
+                if blocked >= 8:  # every way down from here is blocked or dangerous
+                    ctx.say("I can't find a safe way down from here. let's try somewhere else!")
+                    break
                 if not self.turn():
                     break
+                continue
+            blocked = 0
             self.after_step()
         # 3. Branch mine at that level.
         leg, legs = 0, 0
@@ -525,6 +544,8 @@ class Mine(Task):
         if self.heals > 3:
             return False
         ctx.say("ouch! backing off to heal up, then I'll keep going.")
+        import life
+        life.note_danger(self.pos(), "hurt while mining")
         path = (self.track or {}).get("path") or []
         if len(path) > 6:
             back = path[-6]
@@ -672,6 +693,12 @@ class Mine(Task):
         self.plug(sorted(holes, key=lambda c: c[1]))
         return True
 
+    def heading_into_danger(self, ahead):
+        import life
+        if not hasattr(self, "_danger_spots") or time.time() - getattr(self, "_danger_read", 0) > 30:
+            self._danger_spots, self._danger_read = life.dangers(), time.time()
+        return life.near_danger(ahead, 6, self._danger_spots)
+
     def light_the_way(self):
         """Dark where he stands: a torch on the step behind him (making some first from
         coal and sticks if he has the coal)."""
@@ -718,6 +745,9 @@ class Mine(Task):
         """One step down the staircase. False when this direction is blocked."""
         x, y, z = self.pos()
         dx, dz = self.dir
+        if self.heading_into_danger((x + dx * 3, y - 3, z + dz * 3)):
+            self.ctx.say("that way's where I got hurt before, going another way.")
+            return False
         front = [(x + dx, y + 1, z + dz), (x + dx, y, z + dz), (x + dx, y - 1, z + dz)]
         self.face()
         for c in front:
