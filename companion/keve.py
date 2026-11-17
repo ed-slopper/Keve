@@ -33,9 +33,9 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround, plant.Plant, room.DigRoom)})
+                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room")
+               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -210,7 +210,7 @@ class Keve:
             return None
         if len(out) == 1:
             return out[0]
-        words = {"dig_room": "dig out the room","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+        words = {"dig_room": "dig out the room", "floor": "redo the floor","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
                  "come": "come back", "follow": "follow you", "give": "bring it over",
                  "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
                  "defend": "guard you", "plant": "plant it", "hunt": "hunt {mob}",

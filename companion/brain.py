@@ -169,6 +169,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "floor": "Replace or redo the floor of the room with a block",
         "dig_room": "Dig out or widen a room or space where the player is, on the same level",
         "light_up": "Place torches to light up a room, a cave or an area",
         "hunt": "Kill a particular animal or mob, like a cow, pig, sheep or zombie",
@@ -277,7 +278,32 @@ def route_room(text):
     return "dig_room", {"size": max(1, min(size, 6))}
 
 
+FLOOR = re.compile(r"\b(replace|redo|change|swap|cover|lay|put|pave|make|do|turn|switch)\b.*\bfloo?rs?\b|\bfloo?rs?\b.*\b(with|to|into|out of)\b")
+
+
+def route_floor(text):
+    """'replace the floor with cobblestone' / 'make the floor stone bricks': the room's floor."""
+    if not FLOOR.search(text) or re.search(r"\b(on|off|onto|from) (the |this |that |my |our )?floo?r\b|\b(torch|lantern|chest|bed|sapling)", text):
+        return None
+    item = None
+    import world_names
+    names = world_names.names()
+    m = re.search(r"\b(with|to|into|out of|in|as)\b\s+(.*)$", text)
+    for part in ([m.group(2)] if m else []) + [text]:
+        if names:
+            found, _ = names.item_in(part)
+            if found and found not in ("minecraft:air",):
+                item = found
+                break
+    if item is None and re.search(r"\bcobble", text):
+        item = "minecraft:cobblestone"
+    return "floor", {"item": item or "minecraft:cobblestone"}
+
+
 def reflex_route(text):
+    floor = route_floor(text)
+    if floor:
+        return floor
     room = route_room(text)
     if room:
         return room
@@ -630,6 +656,7 @@ ACKS = {
     "take": ["checking the chest", "on it"],
     "light_up": ["on it, lighting it up", "torches coming up"],
     "dig_room": ["renovation time", "digging it out"],
+    "floor": ["new floor, coming right up", "flooring time"],
     "hunt": ["on it", "say goodbye to it", "it's dead meat"],
     "plant": ["planting!", "a tree is born!"],
     "break": ["on it", "breaking the {label}", "getting the {label}"],

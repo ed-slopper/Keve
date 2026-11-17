@@ -165,3 +165,113 @@ class DigRoom(Task):
                 if self.done():
                     return False
         return False
+
+
+class ReplaceFloor(Task):
+    """'keve replace the floor with cobblestone (it's in the chest)': every floor block of the
+    room you're in, swapped for that block. Takes it from a nearby chest if Keve is short."""
+    name = "floor"
+    MAX_CELLS = 160
+
+    def run(self):
+        ctx = self.ctx
+        item = self.args.get("item") or "minecraft:cobblestone"
+        shown = item.removeprefix("minecraft:").replace("_", " ")
+        o = ctx.owner()
+        centre = tuple(math.floor(v) for v in (o[1] if o else ctx.state()["player"]["position"]))
+        y = centre[1]
+        snap = sight.Snapshot.read(ctx.senses, centre, rh=14, rv=4)
+        room = measure(snap, centre, y, 2, 12)
+        self.room = room
+        if not room:
+            ctx.say("I can't tell where the floor is. stand in the room and ask again!")
+            return
+        cells = [(x, y - 1, z) for x, z in room if base(snap.name((x, y - 1, z))) != item]
+        if len(room) >= MAX_FLOOR:
+            ctx.say("this place is huge, I'll do the floor around you.")
+        cells.sort(key=lambda c: math.dist(c, centre))
+        cells = cells[:self.MAX_CELLS]
+        if not cells:
+            ctx.say(f"the floor's already all {shown}!")
+            return
+        have = ctx.counts().get(item, 0)
+        if have < len(cells):
+            self.fetch(item, len(cells) - have)
+            have = ctx.counts().get(item, 0)
+        if have <= 0:
+            ctx.say(f"I don't have any {shown}, and there's none in a chest near you.")
+            return
+        if have < len(cells):
+            ctx.say(f"I've only got {have} {shown} for {len(cells)} floor blocks, doing what I can.")
+            cells = cells[:have]
+        ctx.say(f"new floor coming up: {len(cells)} blocks of {shown}!")
+        names = world_names.names()
+        done = 0
+        for c in cells:
+            if self.done():
+                return
+            if self.swap(c, item, names):
+                done += 1
+            if done and done % 10 == 0:
+                ctx.collect(5, self)
+        ctx.collect(6, self)
+        if self.done():
+            return
+        ctx.say(f"floor's done! {done} blocks of {shown}. fancy!" if done else
+                "I couldn't swap any of the floor from here.")
+        if getattr(self, "under_you", False):
+            ctx.say("I skipped the block you're standing on. step off it and ask again to finish!")
+
+    def fetch(self, item, n):
+        import containers
+        ch = containers.Chests(self.ctx, self)
+        pos = ch.find() or ch.find(near_owner=False)
+        if pos is None or not ch.open(pos):
+            return 0
+        try:
+            got = ch.take(lambda i: i == item, n)
+        finally:
+            ch.close()
+        if got:
+            self.ctx.say(f"grabbed {got} {item.removeprefix('minecraft:').replace('_', ' ')} from the chest.")
+        return got
+
+    def swap(self, c, item, names):
+        """Break one floor block and put the new one in its place. Keve never stands on it."""
+        ctx = self.ctx
+        x, y, z = c
+        me = ctx.state()["player"]["block_pos"]
+        if (me[0], me[2]) == (x, z) or math.dist((me[0], me[2]), (x, z)) > 3.5:
+            # Stand on a neighbouring floor block of the room, never the one being dug.
+            spots = [(x + dx, z + dz) for dx, dz in SIDES if (x + dx, z + dz) in self.room]
+            spots.sort(key=lambda p: math.dist(p, (me[0], me[2])))
+            for sx, sz in spots[:2]:
+                ctx.body.call(f"goto {sx + 0.5:.1f} {y + 1:.1f} {sz + 0.5:.1f} --near 0.6 --timeout 6")
+                me = ctx.state()["player"]["block_pos"]
+                if (me[0], me[2]) != (x, z) and math.dist((me[0], me[2]), (x, z)) <= 3.5:
+                    break
+            if (me[0], me[2]) == (x, z) or self.done():
+                return False
+        o = ctx.owner()
+        if o and (math.floor(o[1][0]), math.floor(o[1][2])) == (x, z):
+            self.under_you = True
+            return False  # you're standing on it
+        eye = tuple(ctx.state()["player"]["eye"])
+        snap = sight.Snapshot.read(ctx.senses, c, rh=3, rv=2)
+        name = snap.name(c)
+        if base(name) == item:
+            return True
+        if not snap.block_visible(eye, c, 5.0):
+            return False
+        if solid(name):
+            if any(u in name for u in ("bedrock", "chest", "furnace", "crafting_table", "door", "bed")):
+                return False
+            tool = names.tool_for(name)[0] if names else "pickaxe"
+            ctx.select_best(TOOLS.get(tool, PICKAXES))
+            ctx.body.call(f"look-at block {x} {y} {z}")
+            r = ctx.body.call(f"break {x} {y} {z} --timeout 12")
+            if r.get("error"):
+                return False
+            ctx.recent_breaks.append((x, y, z, time.time()))
+        r = ctx.place(c, item)  # right away, so whatever was under it stays covered
+        return not r.get("error")
