@@ -613,35 +613,84 @@ class Follow(Task):
         ahead = recent[k + 1:]
         if not ahead:
             return False
-        # A jump ahead: where you took off (last point on the ground before the air).
-        for n, pt in enumerate(ahead[:6]):
-            if pt[4]:
-                take_off = ahead[n - 1] if n > 0 else recent[k]
-                land = next((q for q in ahead[n:] if not q[4]), None)
-                if land is None:
-                    break
-                ctx.body.call(f"goto {take_off[0]:.2f} {take_off[1]:.2f} {take_off[2]:.2f} "
-                              f"--near 0.5 --timeout 2 --direct" + (" --sprint" if sprint else ""))
-                ctx.body.call(f"look-at {land[0]:.2f} {land[1] + 0.2:.2f} {land[2]:.2f}")
-                ctx.body.call("move forward 0.5 --sprint --jump")
-                ctx.body.call(f"goto {land[0]:.2f} {land[1]:.2f} {land[2]:.2f} --near 0.6 --timeout 1.5 --direct --sprint")
-                return True
-        # Otherwise a leg of 2-3 blocks along it, straight (the trail already goes around things).
+        jump = self.jump_ahead(recent[k], ahead)
+        if jump:
+            return self.parkour(*jump, sprint=sprint)
+        # Otherwise a leg of about 2 blocks along it, straight (the trail already goes
+        # around things). Short legs, so your next moves are seen soon.
         target = ahead[-1]
         walked = 0.0
         prev = recent[k][:3]
         for pt in ahead:
             walked += math.dist(prev, pt[:3])
             prev = pt[:3]
-            if walked >= 2.5:
+            if walked >= 2.0:
                 target = pt
                 break
-        r = ctx.body.call(f"goto {target[0]:.2f} {target[1]:.2f} {target[2]:.2f} --near 0.7 --timeout 1.2 --direct"
+        r = ctx.body.call(f"goto {target[0]:.2f} {target[1]:.2f} {target[2]:.2f} --near 0.7 --timeout 0.8 --direct"
                           + (" --sprint" if sprint else ""))
         if self.done():
             return True
         after = ctx.eye_and_view()[3]
         return math.dist(after, target[:3]) < math.dist(pos, target[:3]) - 0.3 or r.get("arrived", False)
+
+    def jump_ahead(self, here, ahead):
+        """(take-off, landing) if the next few blocks of your trail are a jump: you were in
+        the air there, or the trail crosses a gap with nothing to stand on, or climbs a
+        block over a gap. None for plain walking (one-block steps are walked)."""
+        for n, pt in enumerate(ahead[:6]):
+            if pt[4]:
+                take_off = ahead[n - 1] if n > 0 else here
+                land = next((q for q in ahead[n:] if not q[4]), None)
+                if land is not None:
+                    return take_off, land
+                return None
+        snap = None
+        prev = here
+        for pt in ahead[:8]:
+            if math.dist((prev[0], prev[2]), (here[0], here[2])) > 4.0:
+                break
+            if snap is None:
+                snap = sight.Snapshot.read(self.ctx.senses, here[:3], rh=6, rv=4)
+            # Look under the straight line from prev to pt for somewhere to stand.
+            steps = max(2, int(math.dist((prev[0], prev[2]), (pt[0], pt[2])) / 0.3))
+            for s in range(1, steps):
+                f = s / steps
+                x, y, z = (prev[0] + (pt[0] - prev[0]) * f, min(prev[1], pt[1]), prev[2] + (pt[2] - prev[2]) * f)
+                bx, by, bz = math.floor(x), math.floor(y + 0.01), math.floor(z)
+                if not any(sight.blocks_body(snap.name((bx, by - d, bz))) for d in (1, 2)):
+                    return prev, next((q for q in ahead if math.dist((q[0], q[2]), (x, z)) > 0.8
+                                       and q[3] >= pt[3]), pt)
+            prev = pt
+        return None
+
+    def parkour(self, take_off, land, sprint=True):
+        """Jump from where you took off to where you landed: back up for a run-up, sprint
+        to the edge, jump, and check he made it (a second go if not)."""
+        ctx = self.ctx
+        dx, dz = land[0] - take_off[0], land[2] - take_off[2]
+        span = math.hypot(dx, dz) or 1.0
+        ux, uz = dx / span, dz / span
+        for attempt in range(2):
+            if self.done():
+                return True
+            ctx.body.call(f"goto {take_off[0]:.2f} {take_off[1]:.2f} {take_off[2]:.2f} --near 0.5 --timeout 3")
+            run = 1.4 if span > 1.6 or land[1] > take_off[1] + 0.4 else 0.6
+            back = (take_off[0] - ux * run, take_off[1], take_off[2] - uz * run)
+            ctx.body.call(f"goto {back[0]:.2f} {back[1]:.2f} {back[2]:.2f} --near 0.3 --timeout 1.5 --direct")
+            here = ctx.eye_and_view()[3]
+            ctx.body.call(f"look-at {land[0]:.2f} {here[1] + 1.6:.2f} {land[2]:.2f}")
+            lead = math.dist((here[0], here[2]), (take_off[0], take_off[2]))
+            if lead > 0.2:
+                ctx.body.call(f"move forward {max(0.1, lead / 5.6 - 0.03):.2f} --sprint")
+            ctx.body.call("move forward 0.75 --sprint --jump")
+            ctx.body.call(f"goto {land[0]:.2f} {land[1]:.2f} {land[2]:.2f} --near 0.6 --timeout 1.2 --direct --sprint")
+            after = ctx.eye_and_view()[3]
+            if math.dist((after[0], after[2]), (land[0], land[2])) < 1.3 and after[1] >= land[1] - 0.4:
+                return True
+            if after[1] < take_off[1] - 1.5:
+                return False  # fell off: find another way up
+        return False
 
 
 class Stay(Task):
@@ -1016,14 +1065,26 @@ class Give(Task):
         ctx = self.ctx
         what = self.args.get("item")  # a GATHER word, or None for everything
         exact = self.args.get("items")  # exact item ids, e.g. from mining or crafting
+        import craft
         if exact:
             ids = {i if ":" in i else "minecraft:" + i for i in exact}
-            item_ok = lambda i: i in ids  # noqa: E731
+            # A family name ("boat", "bed") means any of them: an oak boat is a boat.
+            tests = [craft.INGREDIENTS.get(i.removeprefix("minecraft:")) for i in ids]
+            item_ok = lambda i: i in ids or any(t is not None and t(i) for t in tests)  # noqa: E731
             what = ", ".join(sorted(i.removeprefix("minecraft:").replace("_", " ") for i in ids))
         else:
             if what is None and not self.args.get("everything") and ctx.last_item:
                 what = ctx.last_item  # "bring them to me": what it just gathered
-            item_ok = GATHER[what][1] if what in GATHER else (lambda i: True)
+            short = (what or "").removeprefix("minecraft:")
+            if what in GATHER:
+                item_ok = GATHER[what][1]
+            elif short in craft.INGREDIENTS:
+                item_ok = craft.INGREDIENTS[short]  # something it made: that, not everything
+                what = short
+            elif what and not self.args.get("everything"):
+                item_ok = lambda i, w=what: i == w or i == "minecraft:" + w  # noqa: E731
+            else:
+                item_ok = lambda i: True  # noqa: E731
         items = [i for i, n in ctx.counts().items() if n > 0 and item_ok(i)]
         if not items and exact and len(exact) == 1:
             # "give me a stone pickaxe" with none on hand: get one first, then hand it over.

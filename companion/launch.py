@@ -524,6 +524,8 @@ def main():
                    help="also listen on the microphone (off by default: type in chat, Keve still talks)")
     p.add_argument("--no-translate", action="store_true",
                    help="don't run your words through the chat model first (Kev and the rules only)")
+    p.add_argument("--no-cheats", action="store_true",
+                   help="don't make you an operator on Keve's server (no /gamemode, /give...)")
     p.add_argument("--no-skin", action="store_true", help="Keve keeps the default skin (no skin proxy)")
     p.add_argument("--robot-head", default="observer",
                    help="the block Keve wears as a robot head (observer, dispenser, ... or none)")
@@ -574,6 +576,12 @@ def main():
     server_proc = ensure_server(srv, server_port, skin)
     if skin:
         ensure_proxy(args.port, owner, owner_uuid)
+    if not args.no_cheats and owner:
+        # Your own world: you're an operator (cheats on: /gamemode, /give, /tp...).
+        r = subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd", f"op {owner}"],
+                           capture_output=True, text=True, creationflags=NO_WINDOW)
+        if r.returncode == 0:
+            print(f"Cheats are on for {owner} (you're an operator). Keve.bat --no-cheats to leave them off.")
 
     if not args.no_game:
         step("Starting your Horizon")

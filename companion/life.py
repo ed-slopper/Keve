@@ -247,6 +247,7 @@ class Sequence(Task):
         steps = self.args.get("steps", [])
         self.gather_up_front(steps)
         for i, (skill, args) in enumerate(steps):
+            self.at = i  # where it's up to: after a death, the plan goes on from here
             if self.done():
                 return
             cls = skills.SKILLS.get(skill)
@@ -261,3 +262,108 @@ class Sequence(Task):
         if not self.done() and len(steps) > 1:
             import brain
             self.ctx.say(brain.line("done", "all done!"))
+
+
+class Ride(Task):
+    """'keve get in the boat with me': hop into the boat you're sitting in, then sit tight
+    while you steer. 'keve get out' (or any other order) gets him out.
+
+    Fair: Keve can't see a boat's id, only you. You're in the seat, so he walks up and
+    right-clicks the boat just below you on his side, like a player would, checking each
+    time whether he's sitting yet."""
+    name = "ride"
+
+    def riding(self):
+        try:
+            return self.ctx.body.call("status").get("riding") is not None
+        except Exception:
+            return False
+
+    def run(self):
+        ctx = self.ctx
+        if self.riding():
+            ctx.say("already in!")
+        elif not self.board():
+            if not self.done():
+                ctx.say("I can't get in. hop in the boat first and I'll climb in with you!")
+            return
+        else:
+            ctx.say("in the boat! row, row, row your boat!")
+        while not self.done() and self.riding():
+            time.sleep(0.5)
+        if not self.done():
+            ctx.say("and we're ashore!")
+
+    def board(self):
+        ctx = self.ctx
+        for _ in range(3):
+            if self.done():
+                return False
+            o = ctx.owner()
+            if not o:
+                return False
+            ox, oy, oz = o[1]
+            pos = ctx.eye_and_view()[3]
+            d = math.dist((pos[0], pos[2]), (ox, oz))
+            if d > 2.2:
+                ctx.walk_to((ox, oy, oz), near=1.6, timeout=10, task=self)
+                pos = ctx.eye_and_view()[3]
+                d = math.dist((pos[0], pos[2]), (ox, oz)) or 1.0
+            # The boat's edge on Keve's side, a little lower than where you sit.
+            ux, uz = (pos[0] - ox) / d, (pos[2] - oz) / d
+            for out, dy, side in ((0.55, 0.15, 0.0), (0.55, 0.0, 0.0), (0.45, 0.3, 0.0),
+                                  (0.55, 0.15, 0.45), (0.55, 0.15, -0.45), (0.7, -0.1, 0.0)):
+                if self.done():
+                    return False
+                tx = ox + ux * out - uz * side
+                tz = oz + uz * out + ux * side
+                ctx.body.call(f"look-at {tx:.2f} {oy + dy:.2f} {tz:.2f}")
+                ctx.body.call("mouse right click")
+                time.sleep(0.35)
+                if self.riding():
+                    return True
+        return False
+
+
+def get_out(ctx):
+    """Shift gets you out of a boat or off a horse."""
+    ctx.body.call("key shift down")
+    time.sleep(0.3)
+    ctx.body.call("key shift up")
+
+
+class GetOut(Task):
+    """'keve get out of the boat'."""
+    name = "get_out"
+
+    def run(self):
+        get_out(self.ctx)
+
+
+class Recover(Task):
+    """After dying in the middle of a job: back to where he died for the dropped things
+    (they last 5 minutes), then on with the job from where it was."""
+    name = "recover"
+
+    def run(self):
+        ctx = self.ctx
+        where = self.args.get("where")
+        if where and math.dist(ctx.eye_and_view()[3], where) < 300:
+            ctx.say("going back for my stuff!")
+            for _ in range(12):
+                if self.done():
+                    return
+                if math.dist(ctx.eye_and_view()[3], where) < 3:
+                    break
+                ctx.walk_to(tuple(where), near=2, timeout=15, task=self)
+            for _ in range(3):
+                if self.done() or not ctx.collect(8, self):
+                    break
+        resume = self.args.get("resume")
+        if resume and not self.done():
+            import skills
+            skill, args = resume
+            ctx.say("ok, back to it!")
+            t = skills.SKILLS[skill](ctx, **args)
+            t.cancelled = self.cancelled
+            t.run()

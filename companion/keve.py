@@ -34,7 +34,8 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest)})
+                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest,
+                                           life.Ride, life.GetOut, life.Recover)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
                "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 
@@ -143,6 +144,11 @@ class Keve:
             return  # "faster keve": not an order Keve knows, so keep doing the job
         if skill == "new_chest" and cur is not None and not cur.done() and cur.name == "gather"                 and cur.args.get("endless") and not args.get("resume"):
             args = dict(args, resume=(cur.name, dict(cur.args)))  # store it, then keep chopping
+        if cur is not None and cur.name == "ride" and skill not in ("ride", "status", "look"):
+            try:
+                life.get_out(self.ctx)  # any other order: out of the boat first
+            except CtlError:
+                pass
         self.stop_task()
         if skill not in ("give", "put", "new_chest", "stop", "cant", "idle", "status", "look", "jump", "come", "follow",
                          "handover"):
@@ -236,6 +242,20 @@ class Keve:
             except (KeyError, IndexError):
                 said.append(skill.replace("_", " "))
         return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
+    def job_to_resume(self):
+        """The job Keve was doing, to carry on after a death: (skill, args) or None. A plan
+        goes on from the step it was on."""
+        cur = self.task
+        if cur is None or cur.done() or cur.name in ("idle", "stay", "recover", "status", "help", "look",
+                                                     "jump", "give", "handover"):
+            return getattr(cur, "args", {}).get("resume") if cur is not None and cur.name == "recover" else None
+        args = dict(cur.args)
+        if cur.name == "sequence":
+            args["steps"] = list(args.get("steps", []))[getattr(cur, "at", 0):]
+            if not args["steps"]:
+                return None
+        return cur.name, args
 
     # --- phrases the translator worked out, kept so they work instantly next time ------
     @staticmethod
@@ -359,7 +379,12 @@ class Keve:
             if skill == "give":
                 return "give", {"items": batch, "count": 1}
             return "put", dict(args, item=None, items=batch)
-        named = brain.named_item(low)
+        what = re.sub(r"\b(in|into|inside|to) (the |a |that |this |my |our |a new )?(chest|barrel)\b", " ", low)
+        named = brain.named_item(what)
+        if named is None:
+            made = brain.find_craftable(what)  # "the boat": a family name, any boat
+            if made and made in craft.INGREDIENTS and not re.search(r"\b(from|out of) the chest\b", low):
+                named = "minecraft:" + made
         if named is None and re.search(r"\b(it|that|this one|the thing|them|those)\b", low):
             named = getattr(self.ctx, "last_item", None)
         if named is None:
@@ -601,6 +626,7 @@ class Keve:
                         pass
                 elif kind == "death":
                     journal.log("event", "Keve died", detail=ev)
+                    resume = self.job_to_resume()
                     self.stop_task()
                     try:
                         self.ctrl.call("respawn")
@@ -610,6 +636,11 @@ class Keve:
                     put_head = getattr(self.args, "put_head", None)
                     if put_head:  # the robot head vanished with him: a new one once he's back
                         threading.Timer(3.0, put_head).start()
+                    where = ev.get("position")
+                    if resume or where:
+                        # Back for his things, then on with the job (the quest outlives him).
+                        threading.Timer(4.0, lambda r=resume, w=where: self.start_task(
+                            "recover", {"where": w, "resume": r})).start()
             last = max(last, r.get("last", last))
             time.sleep(0.25)
 

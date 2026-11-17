@@ -170,6 +170,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "ride": "Get in the boat or minecart with the player",
         "new_chest": "Make a new chest, put it down here, and store things in it",
         "rescue": "Dig the player out when they are stuck or trapped",
         "wall": "Replace the wall or walls of the room with a block",
@@ -350,7 +351,16 @@ def route_gather_more(text):
     return None
 
 
+RIDE = re.compile(r"\b(get|hop|climb|jump|sit)( back)? (in|into|on|onto)( to)? (the |my |a |our |this |that )?(boat|raft|minecart|cart)\b"
+                  r"|\bride (with me|in the boat|along)\b|\bcome (in|into) the boat\b")
+GET_OUT = re.compile(r"\b(get|hop|climb|jump) (out|off)\b|\bdismount\b|\bleave the boat\b")
+
+
 def reflex_route(text):
+    if RIDE.search(text):
+        return "ride", {}
+    if GET_OUT.search(text) and not re.search(r"\bget (me )?out of (here|the wall|this)\b|\bget me out\b", text):
+        return "get_out", {}
     # "...until I say stop" names when to stop, it isn't the stop itself.
     text = re.sub(r"\buntil i (say|tell( you)?)( to)? (stop|so)\b", "until i say so", text)
     more = route_gather_more(text)
