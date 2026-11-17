@@ -424,7 +424,7 @@ class Mine(Task):
         want = int(self.args.get("count", 5 if ore == "diamond" else 10))
         blocks, drops, tier, best_y = ORES[ore]
         self.prov = Provision(ctx, self)
-        self.wanted = {ore}
+        self.wanted = {ore, "coal"}  # coal on the way too: torches for the dark
         self.deadline = time.time() + self.MAX_MINUTES * 60
         self.drop_names = {"minecraft:" + d for d in drops}
         ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
@@ -611,6 +611,73 @@ class Mine(Task):
                 return name
         return None
 
+    # --- caves: where the mobs come from --------------------------------------------
+    def seal_cave(self, opened, at):
+        """Did digging just open a hole into a cave? Small openings get boarded up with
+        cobblestone (the mobs in there can't get at him); a big cave means turning the
+        staircase another way. True: carry on this way. False: this way is shut."""
+        tunnel = {tuple(c) for c in opened} | {at, (at[0], at[1] + 1, at[2]), (at[0], at[1] + 2, at[2])}
+        for p in ((self.track or {}).get("path") or [])[-12:]:
+            p = tuple(p)
+            tunnel |= {p, (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])}
+        snap = self.snap(opened[0], 5)
+        holes = set()
+        for c in opened:
+            for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                n = (c[0] + d[0], c[1] + d[1], c[2] + d[2])
+                if n in tunnel:
+                    continue
+                name = snap.name(n)
+                if not is_solid(name) and not sight.is_fluid(name) and "torch" not in name:
+                    holes.add(n)
+        if not holes:
+            return True
+        # How big is the open space behind the holes? (A pocket of one or two is nothing.)
+        seen, todo = set(holes), list(holes)
+        while todo and len(seen) < 40:
+            p = todo.pop()
+            for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                n = (p[0] + d[0], p[1] + d[1], p[2] + d[2])
+                if n in seen or n in tunnel or math.dist(n, at) > 6:
+                    continue
+                name = snap.name(n)
+                if not is_solid(name) and not sight.is_fluid(name):
+                    seen.add(n)
+                    todo.append(n)
+        if len(seen) < 4:
+            return True
+        cobble = self.counts_of("cobblestone") + self.counts_of("cobbled_deepslate")
+        if len(seen) >= 40 or cobble < len(holes):
+            self.ctx.say("a big cave! boarding it up and digging another way.")
+            self.plug(sorted(opened, key=lambda c: -c[1]))
+            self.cave_turns = getattr(self, "cave_turns", 0) + 1
+            return False
+        self.ctx.say("a cave! boarding it up.")
+        self.plug(sorted(holes, key=lambda c: c[1]))
+        return True
+
+    def light_the_way(self):
+        """Dark where he stands: a torch on the step behind him (making some first from
+        coal and sticks if he has the coal)."""
+        x, y, z = self.pos()
+        if self.steps - getattr(self, "last_torch", -99) < 4 or not self.ctx.is_dark_at((x, y, z)):
+            return
+        if not self.counts_of("torch") and self.counts_of("coal") + self.counts_of("charcoal"):
+            only = getattr(self.prov, "only_inventory", False)
+            self.prov.only_inventory = True  # from what he carries: no trip for it
+            try:
+                self.prov.ensure("torch", 8)
+            except Exception:
+                pass
+            self.prov.only_inventory = only
+        if not self.counts_of("torch"):
+            return
+        dx, dz = self.dir
+        for spot in ((x - dx, y, z - dz), (x - dx, y + 1, z - dz)):
+            if not self.ctx.place(spot, "torch").get("error"):
+                self.last_torch = self.steps
+                return
+
     def plug(self, cells):
         """Fill opened cells back in with cobblestone (before lava flows in)."""
         for c in cells:
@@ -645,6 +712,8 @@ class Mine(Task):
             self.ctx.say(f"{base(bad).removeprefix('minecraft:')} ahead, going around it.")
             self.plug(front[::-1])
             return False
+        if not self.seal_cave(front, (x, y, z)):
+            return False  # a big cave that way: boarded up, the stairs go another way
         floor = (x + dx, y - 2, z + dz)
         if not is_solid(self.snap(floor, 1).name(floor)):
             self.ctx.say("there's a drop here, going another way.")
@@ -670,6 +739,8 @@ class Mine(Task):
             self.ctx.say(f"{base(bad).removeprefix('minecraft:')}! turning back.")
             self.plug(front[::-1])
             return False
+        if not self.seal_cave(front, (x, y, z)):
+            return False
         floor = (x + dx, y - 1, z + dz)
         if not is_solid(self.snap(floor, 1).name(floor)):
             # A hole in the floor: put a block in it rather than fall.
@@ -691,10 +762,7 @@ class Mine(Task):
                 self.ctx.say("made a stone pickaxe.")
         if self.steps % 16 == 0:
             self.ctx.say(f"y {self.pos()[1]}, {self.have() - self.start_have} so far.")
-        if self.steps % 8 == 0 and self.counts_of("torch"):
-            x, y, z = self.pos()
-            dx, dz = self.dir
-            self.ctx.place((x - dx, y, z - dz), "torch")
+        self.light_the_way()
         self.ctx.maybe_eat()
         if self.steps % 6 == 0:
             self.ctx.drop_junk()
