@@ -315,6 +315,8 @@ class Mine(Task):
     name = "mine"
     MAX_MINUTES = 20
     NEAR_MINE = 48
+    track = None  # the staircase being dug (none for a quick dig for stone)
+    steps = 0
 
     def run(self):
         self.track = None
