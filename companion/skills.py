@@ -73,7 +73,8 @@ class Ctx:
         self.bad_targets = {}     # (x, y, z) -> failures
         self.placed_stations = []  # tables Keve put down and will pack up when idle
         self.last_craft_time = 0.0
-        self.last_item = None     # what Keve last made or got: 'give it to me' means this
+        self.last_item = None
+        self.made_batch = []      # everything made for the latest order: 'give them to me'     # what Keve last made or got: 'give it to me' means this
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
         self.last_item = None     # what it gathered last ("bring them to me")
         self.provoked = {}        # mob type -> when it last hurt Keve or you
@@ -701,6 +702,14 @@ class Gather(Task):
             ctx.memory.pop(t, None)
             ctx.recent_breaks.append((t[0], t[1], t[2], time.time()))
             breaks += 1
+            if self.args.get("endless") and breaks % 16 == 0:
+                inv = ctx.body.call("inventory")
+                used = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
+                if len(used) >= 35:
+                    ctx.say(f"my pockets are FULL! {have() - start} {shown} so far. "
+                            f"take some, or tell me to put my stuff in the chest.")
+                    return
+                ctx.say(f"{have() - start} {shown} and counting!")
             # Pick up the drop. A fresh drop can't be picked up for 10 ticks (0.5 s), so
             # wait that out first; sand and gravel can also fall and drops can roll.
             time.sleep(0.7)

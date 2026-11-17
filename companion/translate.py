@@ -17,7 +17,7 @@ import urllib.request
 
 COMMANDS = """\
 keve follow me | keve come here | keve stay | keve stop | keve jump | keve look at me
-keve get 10 wood | keve get 5 dirt | keve get 8 sand | keve get some gravel | keve get 20 stone | keve get sugar cane | keve get 3 pumpkins | keve get clay
+keve get 10 wood | keve chop trees until i say stop | keve get 5 dirt | keve get 8 sand | keve get some gravel | keve get 20 stone | keve get sugar cane | keve get 3 pumpkins | keve get clay
 keve get 10 wood and bring it to me | keve bring me the sand (hand over what it has) | keve give me everything | keve give me a stone pickaxe | keve give me 16 torches
 keve mine for diamonds | keve mine 10 iron | keve mine some coal | keve go mining
 keve mine this coal | keve break that glass | keve dig this dirt | keve chop that birch log | keve get me 10 andesite
@@ -52,6 +52,8 @@ Rules:
 - "ok", "okay", "nice", "thanks", "cool" on their own are chat, never "come here".
 - Keep the player's material: "stone sword" is "keve make a stone sword", never iron or wooden.
 - Keep the exact item the player names: "put the X in the chest" is never "put your stuff in the chest". "your stuff" is only for everything.
+- Doing something "until I say", "forever", "nonstop" keeps those words: "keve chop trees until i say stop".
+- "them"/"those" with give/put means the things Keve just made, one command each; "give me everything" only when the player says everything/all.
 - "it"/"that" with give/put means what Keve just made or got (given in "Right now").
 - Never output placeholders like [item] or <item>. If you don't know the item, use the closest real one or leave it out.
 - addressed: is the player talking to Keve (true) or to someone else / themselves (false)?
@@ -74,6 +76,8 @@ Examples:
 "give it to me" (Keve just made a stone pickaxe) -> {{"addressed": true, "commands": ["keve give me the stone pickaxe"], "chat": false}}
 "make me stone sword" -> {{"addressed": true, "commands": ["keve make a stone sword"], "chat": false}}
 "make all the stone tools and put them in the chest" -> {{"addressed": true, "commands": ["keve make a stone pickaxe", "keve make a stone axe", "keve make a stone shovel", "keve make a stone hoe", "keve make a stone sword", "keve put the stone tools in the chest"], "chat": false}}
+"keve mine trees until i say" -> {{"addressed": true, "commands": ["keve chop trees until i say stop"], "chat": false}}
+"give them to me" (Keve just made a stone sword, axe and hoe) -> {{"addressed": true, "commands": ["keve give me the stone sword", "keve give me the stone axe", "keve give me the stone hoe"], "chat": false}}
 "faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}

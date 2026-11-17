@@ -317,7 +317,31 @@ RESCUE = re.compile(r"\b(i'?m|im|i am|i got|i'?ve got|got) (stuck|trapped|walled
                     r"|\bhole\b.*\b(me|i) (to )?(get )?out\b|\bget (me )?out of (here|the wall|this)\b|\bcan'?t get out\b")
 
 
+ENDLESS = re.compile(r"\b(until i (say|tell( you)?)( (to )?stop)?|forever|for ever|non ?stop|all day|endless(ly)?|"
+                     r"keep (on )?(chopping|cutting|mining|getting|going|gathering|digging)|don'?t stop|never stop|"
+                     r"as (much|many) as you can)\b")
+TREES = re.compile(r"\b(trees?|logs?|wood)\b")
+
+
+def route_gather_more(text):
+    """'chop trees until I say stop' -> wood nonstop; 'mine trees' (no number) -> a good pile."""
+    if not re.search(r"\b(chop|chopping|cut|cutting|mine|mining|get|harvest|gather|collect|fell|punch|keep)\b", text):
+        return None
+    item = "wood" if TREES.search(text) or re.search(r"\b(chop|chopping|cut|cutting|fell)\b", text)         else find_item(text)
+    if item is None:
+        return None
+    if ENDLESS.search(text):
+        return "gather", {"item": item, "count": 100000, "endless": True,
+                          "max_seconds": 4 * 3600, "max_explores": 100000}
+    if re.search(r"\btrees\b", text) and not re.search(r"[0-9]|\b(a|one|this|that) tree\b", text):
+        return "gather", {"item": "wood", "count": parse_count(text) or 16}
+    return None
+
+
 def reflex_route(text):
+    more = route_gather_more(text)
+    if more:
+        return more
     if RESCUE.search(text) and not re.search(r"\bhelp me\b", text) or re.search(r"\b(stuck|trapped|get( me)? out|dig me out|mine me out)\b", text):
         return "rescue", {}
     floor = route_floor(text)

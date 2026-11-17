@@ -157,7 +157,9 @@ class PutInChest(Task):
             return
         try:
             # "everything" still keeps its tools and food, as a player would.
-            moved = ch.put(item_matcher(word), keep=() if word else self.KEEP)
+            items = self.args.get("items")
+            match = (lambda i: i in items) if items else item_matcher(word)
+            moved = ch.put(match, keep=() if (word or items) else self.KEEP)
         finally:
             ch.close()
         ctx.say(f"put {moved} items in the chest." if moved else "I had nothing to put in there.")

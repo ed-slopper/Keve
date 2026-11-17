@@ -138,6 +138,8 @@ class Keve:
         if skill == "cant" and cur is not None and cur.name != "idle" and not cur.done():
             return  # "faster keve": not an order Keve knows, so keep doing the job
         self.stop_task()
+        if skill not in ("give", "put", "stop", "cant", "idle", "status", "look", "jump", "come", "follow"):
+            self.ctx.made_batch = []  # a new job: 'them' will mean what this one makes
         if skill == "cant":
             skill, args = "idle", {}
         if skill == "stop":
@@ -242,14 +244,20 @@ class Keve:
             return skill, args
         if re.search(r"\b(everything|all|your stuff|your things|inventory|all your)\b", original.lower()):
             return skill, args
-        named = brain.named_item(original.lower())
-        if named is None and re.search(r"\b(it|that|this one|the thing)\b", original.lower()):
+        low = original.lower()
+        batch = list(dict.fromkeys(getattr(self.ctx, "made_batch", []) or []))
+        if re.search(r"\b(them|those|these|the tools|all of them)\b", low) and len(batch) > 1:
+            if skill == "give":
+                return "give", {"items": batch, "count": 1}
+            return "put", dict(args, item=None, items=batch)
+        named = brain.named_item(low)
+        if named is None and re.search(r"\b(it|that|this one|the thing|them|those)\b", low):
             named = getattr(self.ctx, "last_item", None)
         if named is None:
             return skill, args
         if skill == "put":
             return "put", dict(args, item=named.removeprefix("minecraft:"))
-        return "give", {"items": [named], "count": 1}
+        return "give", {"items": [named], "count": 1}  # not 'everything' when you named it
 
     def plan_steps(self, speaker, steps):
         """Several orders in one message: each step read on its own (reflexes, then Kev),
@@ -305,8 +313,16 @@ class Keve:
         except Exception:
             seen = []
         sees = ", ".join(f"{k} ({d:.0f} blocks away)" for k, c, d in seen) or "nothing special"
-        last = getattr(self.ctx, "last_item", None) if getattr(self, "ctx", None) else None
-        last = f" Keve just made/got: {last.removeprefix('minecraft:').replace('_', ' ')} (that's what 'it' means)." if last else ""
+        ctx = getattr(self, "ctx", None)
+        batch = list(dict.fromkeys(getattr(ctx, "made_batch", []) or []))
+        last = getattr(ctx, "last_item", None)
+        if len(batch) > 1:
+            last = (" Keve just made: " + ", ".join(b.removeprefix("minecraft:").replace("_", " ") for b in batch)
+                    + " ('them'/'those' means these; give them = give me each of these, not everything).")
+        elif last:
+            last = f" Keve just made/got: {last.removeprefix('minecraft:').replace('_', ' ')} (that's what 'it' means)."
+        else:
+            last = ""
         return f"Keve is carrying: {carrying}. Keve is doing: {doing}. Keve can see: {sees}.{last}"
 
     def addressed_by_name(self, low):

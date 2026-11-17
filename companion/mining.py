@@ -262,6 +262,7 @@ class Craft(Task):
             return
         if ok:
             self.ctx.last_item = "minecraft:" + item
+            self.ctx.made_batch.append("minecraft:" + item)
             self.ctx.say(f"made {shown}!" if count == 1 else f"made {count} {shown}!")
             if self.args.get("give"):
                 Give(self.ctx, item=None, items=[item]).run_inner(self)
@@ -276,11 +277,118 @@ class Craft(Task):
 
 
 class Mine(Task):
-    """'keve mine for diamonds' / 'go get 10 iron' / 'mine some coal'."""
+    """'keve mine for diamonds' / 'go get 10 iron' / 'mine some coal'.
+
+    Keve remembers every staircase he digs (memory.json: its top, each step, its bottom)
+    and marks the first one as 'the mine'. Next time he goes mining near one, or near a
+    place you called a mine, he walks down the old stairs and digs on from the bottom."""
     name = "mine"
     MAX_MINUTES = 20
+    NEAR_MINE = 48
 
     def run(self):
+        self.track = None
+        try:
+            self._run()
+        finally:
+            self.save_track()
+
+    # --- remembered staircases ---------------------------------------------------------
+    def known_mines(self):
+        import life
+        mem = life.load_memory()
+        mines = [dict(m) for m in mem.get("mines", [])]
+        for name, pos in mem.get("places", {}).items():
+            if "mine" in name and not any(math.dist(m["top"], pos) < 4 for m in mines):
+                mines.append({"top": pos, "path": [], "name": name})
+        return mines
+
+    def save_track(self):
+        t = self.track
+        if not t or len(t["path"]) < 3:
+            return
+        import life
+        mem = life.load_memory()
+        mines = [m for m in mem.get("mines", []) if math.dist(m["top"], t["top"]) >= 3]
+        t["bottom"] = t["path"][-1]
+        t["updated"] = time.time()
+        mines.append({k: t[k] for k in ("top", "path", "bottom", "dir", "updated")})
+        mem["mines"] = mines[-12:]
+        places = mem.setdefault("places", {})
+        if "mine" not in places or math.dist(places["mine"], t["top"]) < 4:
+            if "mine" not in places:
+                x, y, z = t["top"]
+                self.ctx.say(f"marked my mine at {x:.0f} {y:.0f} {z:.0f}, I'll use these stairs next time.")
+            places["mine"] = [round(v, 2) for v in t["top"]]
+        life.save_memory(mem)
+
+    def reuse_staircase(self, best_y):
+        """Walk down a staircase dug before, if one starts near here. True when used."""
+        ctx = self.ctx
+        here = ctx.state()["player"]["position"]
+        near = [m for m in self.known_mines() if math.dist(m["top"], here) <= self.NEAR_MINE]
+        if not near:
+            return False
+        m = min(near, key=lambda m: math.dist(m["top"], here))
+        x, y, z = m["top"]
+        ctx.say(f"I know a staircase at {x:.0f} {y:.0f} {z:.0f}, taking that down!")
+        for _ in range(6):
+            if self.done():
+                return False
+            if math.dist(ctx.state()["player"]["position"], m["top"]) < 2.5:
+                break
+            ctx.walk_to(tuple(m["top"]), near=1.5, timeout=20, task=self)
+        if math.dist(ctx.state()["player"]["position"], m["top"]) > 4:
+            ctx.say("couldn't get to the old stairs, I'll dig new ones here.")
+            return False
+        path = [tuple(p) for p in m.get("path", [])]
+        self.track = {"top": list(m["top"]), "path": [list(p) for p in path], "dir": m.get("dir")}
+        if m.get("dir"):
+            self.dir = tuple(m["dir"])
+        # The recorded steps, a few at a time (the steps are open, so the planner walks them).
+        for wp in path[2::3] + path[-1:]:
+            if self.done():
+                return True
+            if wp[1] < best_y - 1:
+                break
+            r = ctx.body.call(f"goto {wp[0] + 0.5:.2f} {wp[1]:.2f} {wp[2] + 0.5:.2f} --near 1.2 --timeout 10")
+            if not r.get("arrived") and math.dist(ctx.state()["player"]["position"], wp) > 2.5:
+                break  # caved in or blocked: dig on from here
+        self.follow_open_stairs(best_y)
+        return True
+
+    def follow_open_stairs(self, best_y):
+        """Keep walking down open steps Keve can see (a staircase it didn't record, or
+        the rest of one). Stops where the stairs end."""
+        ctx = self.ctx
+        dirs = DIRS
+        for _ in range(400):
+            if self.done():
+                return
+            x, y, z = self.pos()
+            if y <= best_y:
+                return
+            s = self.snap((x, y, z), 3)
+            order = ([self.dir] if self.dir else []) + [d for d in dirs if d != self.dir]
+            went = False
+            for dx, dz in order:
+                feet, head, top, floor = ((x + dx, y - 1, z + dz), (x + dx, y, z + dz),
+                                          (x + dx, y + 1, z + dz), (x + dx, y - 2, z + dz))
+                if any(is_solid(s.name(c)) or sight.is_fluid(s.name(c)) for c in (feet, head, top)):
+                    continue
+                if not is_solid(s.name(floor)):
+                    continue
+                if self.walk_to(feet):
+                    self.dir = (dx, dz)
+                    if self.track is not None:
+                        self.track["path"].append(list(feet))
+                        self.track["dir"] = list(self.dir)
+                    went = True
+                    break
+            if not went:
+                return
+
+    def _run(self):
         ctx = self.ctx
         ore = self.args.get("ore", "iron")
         want = int(self.args.get("count", 5 if ore == "diamond" else 10))
@@ -305,6 +413,8 @@ class Mine(Task):
         self.dir = DIRS[round(((p["yaw"] % 360) / 90)) % 4]
         self.steps = 0
         ctx.say(f"heading down to y {best_y} for {ore}.")
+        if not self.reuse_staircase(best_y) or self.track is None:
+            self.track = {"top": list(ctx.state()["player"]["position"]), "path": [], "dir": list(self.dir)}
         # 2. Staircase down to the ore's level (taking ores seen on the way).
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
             if not self.stair_step():
@@ -471,7 +581,11 @@ class Mine(Task):
             self.ctx.say("there's a drop here, going another way.")
             self.plug([front[2]])
             return False
-        return self.walk_to((x + dx, y - 1, z + dz))
+        ok = self.walk_to((x + dx, y - 1, z + dz))
+        if ok and getattr(self, "track", None) is not None:
+            self.track["path"].append([x + dx, y - 1, z + dz])
+            self.track["dir"] = list(self.dir)
+        return ok
 
     def tunnel_step(self):
         """One block of 1x2 tunnel forward."""
