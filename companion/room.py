@@ -291,6 +291,13 @@ class Resurface(Task):
         name = snap.name(cell)
         if kind != "clear" and base(name) == self.item:
             return True
+        if kind == "swap" and not solid(name):
+            return False  # dug out since the plan was made (maybe by you): never wall that up
+        o = ctx.owner()
+        if o and kind != "clear":
+            ox, oy, oz = (math.floor(v) for v in o[1])
+            if (x, z) == (ox, oz) and oy <= y <= oy + 1:
+                return False  # that's where you are
         if solid(name):
             if not snap.block_visible(eye, cell, 5.0):
                 return False
@@ -369,3 +376,76 @@ class ReplaceWall(Resurface):
                 seen.add(cell)
                 out.append((cell, stand, "swap"))
         return out
+
+
+class Rescue(Task):
+    """'keve I'm stuck, mine me out' / 'dig a hole so I can get out': Keve tunnels from where
+    he is to you, two blocks high, and stops once you're joined up. Fair: he digs the face in
+    front of him, one block at a time, the way he'd dig any tunnel."""
+    name = "rescue"
+    MAX_BLOCKS = 24
+
+    def run(self):
+        ctx = self.ctx
+        o = ctx.owner()
+        if not o:
+            ctx.say("I can't see where you are! shout louder!")
+            return
+        import mining
+        prov = mining.Provision(ctx, self)
+        if prov.pick_tier() < 0:
+            prov.ensure_pickaxe(0)  # faster with one, but hands work on dirt too
+        miner = mining.Mine(ctx, ore="coal")
+        miner.cancelled = self.cancelled
+        miner.prov = prov
+        ctx.say("hang on buddy, I'm coming to dig you out!")
+        ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 1.5 --timeout 12")
+        dug = 0
+        for _ in range(40):
+            if self.done():
+                return
+            o = ctx.owner()
+            if not o:
+                break
+            ox, oy, oz = (math.floor(v) for v in o[1])
+            me = ctx.state()["player"]["block_pos"]
+            mx, my, mz = me
+            if abs(ox - mx) + abs(oz - mz) <= 1 and abs(oy - my) <= 1:
+                break  # side by side: joined up
+            # One step toward you, along the longer way first.
+            if abs(ox - mx) >= abs(oz - mz):
+                step = (mx + (1 if ox > mx else -1), mz)
+            else:
+                step = (mx, mz + (1 if oz > mz else -1))
+            ty = my + (1 if oy > my else -1 if oy < my else 0)
+            cells = [(step[0], ty, step[1]), (step[0], ty + 1, step[1])]
+            if ty > my:
+                cells.insert(0, (mx, my + 2, mz))  # headroom to step up
+            ctx.select_best(PICKAXES)
+            for c in cells:
+                if self.done():
+                    return
+                name = sight.Snapshot.read(ctx.senses, c, rh=1, rv=1).name(c)
+                if solid(name):
+                    ctx.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                    if not miner.dig_through(c):
+                        ctx.say("I can't dig through that bit, try breaking toward me!")
+                        return
+                    dug += 1
+            fluid = miner.hazard_near(cells)
+            if fluid and "lava" in fluid:
+                miner.plug(cells)
+                ctx.say("lava back there! I plugged it. let's find another way.")
+                return
+            ctx.body.call(f"goto {step[0] + 0.5:.2f} {ty:.2f} {step[1] + 0.5:.2f} --near 0.4 --timeout 3 --direct")
+            if dug >= self.MAX_BLOCKS:
+                break
+        ctx.collect(4, self)
+        if self.done():
+            return
+        o = ctx.owner()
+        me = ctx.state()["player"]["block_pos"]
+        if o and math.dist((math.floor(o[1][0]), math.floor(o[1][2])), (me[0], me[2])) <= 1.5:
+            ctx.say("FREEDOM! you're out, buddy!" + (f" dug {dug} blocks." if dug else ""))
+        else:
+            ctx.say("I couldn't reach you, try digging toward me!")

@@ -169,6 +169,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "rescue": "Dig the player out when they are stuck or trapped",
         "wall": "Replace the wall or walls of the room with a block",
         "floor": "Replace or redo the floor of the room with a block",
         "dig_room": "Dig out or widen a room or space where the player is, on the same level",
@@ -311,7 +312,14 @@ def route_floor(text):
     return "floor", {"item": item}
 
 
+RESCUE = re.compile(r"\b(i'?m|im|i am|i got|i'?ve got|got) (stuck|trapped|walled in|boxed in)\b"
+                    r"|\b(dig|mine|get|break|let|bust) me out\b|\bsave me\b|\b(free|rescue|help) me( out)?\b(?! with)"
+                    r"|\bhole\b.*\b(me|i) (to )?(get )?out\b|\bget (me )?out of (here|the wall|this)\b|\bcan'?t get out\b")
+
+
 def reflex_route(text):
+    if RESCUE.search(text) and not re.search(r"\bhelp me\b", text) or re.search(r"\b(stuck|trapped|get( me)? out|dig me out|mine me out)\b", text):
+        return "rescue", {}
     floor = route_floor(text)
     if floor:
         return floor
@@ -669,6 +677,7 @@ ACKS = {
     "dig_room": ["renovation time", "digging it out"],
     "floor": ["new floor, coming right up", "flooring time"],
     "wall": ["new walls, coming right up", "wall makeover time"],
+    "rescue": ["hold on, I'm coming", "don't panic, I've got you"],
     "hunt": ["on it", "say goodbye to it", "it's dead meat"],
     "plant": ["planting!", "a tree is born!"],
     "break": ["on it", "breaking the {label}", "getting the {label}"],
