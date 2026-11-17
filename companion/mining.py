@@ -693,11 +693,17 @@ class Mine(Task):
         self.plug(sorted(holes, key=lambda c: c[1]))
         return True
 
-    def heading_into_danger(self, ahead):
-        import life
+    def heading_into_danger(self, here, ahead):
+        """Would this step take him toward a place he got hurt? Already in one (he logged
+        in there, or respawned near it): only steps that get closer are refused, so he
+        can always dig his way out of it."""
         if not hasattr(self, "_danger_spots") or time.time() - getattr(self, "_danger_read", 0) > 30:
+            import life
             self._danger_spots, self._danger_read = life.dangers(), time.time()
-        return life.near_danger(ahead, 6, self._danger_spots)
+        for d in self._danger_spots:
+            if math.dist(d["pos"], ahead) <= 6 and math.dist(d["pos"], ahead) < math.dist(d["pos"], here) - 0.5:
+                return True
+        return False
 
     def light_the_way(self):
         """Dark where he stands: a torch on the step behind him (making some first from
@@ -745,8 +751,10 @@ class Mine(Task):
         """One step down the staircase. False when this direction is blocked."""
         x, y, z = self.pos()
         dx, dz = self.dir
-        if self.heading_into_danger((x + dx * 3, y - 3, z + dz * 3)):
-            self.ctx.say("that way's where I got hurt before, going another way.")
+        if self.heading_into_danger((x, y, z), (x + dx * 3, y - 3, z + dz * 3)):
+            if not getattr(self, "_told_danger", False):
+                self.ctx.say("that way's where I got hurt before, going another way.")
+                self._told_danger = True
             return False
         front = [(x + dx, y + 1, z + dz), (x + dx, y, z + dz), (x + dx, y - 1, z + dz)]
         self.face()

@@ -102,11 +102,25 @@ class Keve:
             self.via_voice = False
 
     # --- talking -------------------------------------------------------------------
+    said = []  # (time, line): what Keve said lately
+    say_lock = threading.Lock()
+
     def say(self, text):
         text = (text or "").strip()
         if not text:
             return
         text = text.lstrip("/")[:250]
+        # The server kicks a player who chats too fast (it did: nine lines in a second, and
+        # Keve was gone). The same line again within 20 s is skipped; otherwise at most 5
+        # lines in 3 s, waiting for the next slot.
+        with self.say_lock:
+            now = time.time()
+            if text not in skills.HELP_LINES and any(t == text and now - w < 20 for w, t in self.said):
+                return
+            recent = [w for w, _ in self.said if now - w < 3]
+            if len(recent) >= 5:
+                time.sleep(max(0.0, 3 - (now - recent[-5])) + 0.05)
+            self.said = [(w, t) for w, t in self.said if time.time() - w < 20] + [(time.time(), text)]
         try:
             self.ctrl.call("chat " + text)
             self.talk.note("assistant", text)
