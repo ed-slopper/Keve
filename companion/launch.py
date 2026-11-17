@@ -305,9 +305,25 @@ def robot_head(ctl_exe, srv, block):
     head = next((a for a in inv.get("armor", []) if a.get("part") == "head"), {})
     if head.get("item"):
         return
-    subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd",
-                    f"item replace entity Keve armor.head with minecraft:{block}"],
-                   capture_output=True, creationflags=NO_WINDOW)
+    wear_head(srv, block)
+
+
+def wear_head(srv, block):
+    """Put the head block on Keve. It carries Curse of Vanishing, so when Keve dies it's
+    gone instead of dropped (Keve puts a fresh one back on when he respawns)."""
+    if not block or block == "none":
+        return False
+    for spec in (f'minecraft:{block}[enchantments={{"minecraft:vanishing_curse":1}}]',
+                 f"minecraft:{block}[enchantments={{vanishing_curse:1}}]",
+                 f"minecraft:{block}"):
+        r = subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd",
+                            f"item replace entity Keve armor.head with {spec}"],
+                           capture_output=True, text=True, creationflags=NO_WINDOW)
+        out = ((r.stdout or "") + (r.stderr or "")).lower()
+        if r.returncode == 0 and not any(w in out for w in ("error", "unknown", "expected", "invalid",
+                                                              "incorrect", "failed")):
+            return True
+    return False
 
 
 # --- the server -------------------------------------------------------------------------
@@ -578,7 +594,8 @@ def main():
                                ollama=OLLAMA, kev_model=kev or None, brain_model=brain_model or None,
                                brain_ctx=profile.get("brain_ctx", 4096), decide_s=profile.get("decide_s", 4),
                                ears=ears, mouth=mouth, no_translate=args.no_translate, whisper=profile.get("whisper") or "small.en",
-                               whisper_device=profile.get("whisper_device", "cpu"))
+                               whisper_device=profile.get("whisper_device", "cpu"),
+                               put_head=(lambda: wear_head(srv, args.robot_head)))
     if ears != "off" or mouth != "off":
         print(f"Voice: {ears} ears, {mouth} voice. " + ("Say 'Keve, follow me'." if ears != "off" else
               "Mic is off: type to Keve in chat (Keve.bat --mic to talk to him)."))

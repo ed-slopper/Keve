@@ -11,6 +11,7 @@ Names come from the game's own registry (world_names.py), so every block works.
 Fair as always: a block has to be in Keve's sight before it's touched.
 """
 import math
+import re
 import time
 
 import sight
@@ -27,11 +28,11 @@ NOTABLE = ("ore", "chest", "barrel", "crafting_table", "furnace", "log", "water"
            "amethyst", "obsidian", "glowstone", "mushroom", "flower", "sapling", "rail")
 
 
-def nearest_visible(ctx, ids, around, radius=10, need_fov=False):
+def nearest_visible(ctx, ids, around, radius=10, need_fov=False, skip=()):
     """The nearest block of `ids` to `around` that Keve can see from where it stands."""
     eye, yaw, pitch, _ = ctx.eye_and_view()
     snap = sight.Snapshot.read(ctx.senses, around, rh=radius, rv=min(radius, 6))
-    found = [p for p, n in snap.blocks.items() if base(n) in ids]
+    found = [p for p, n in snap.blocks.items() if base(n) in ids and p not in skip]
     found.sort(key=lambda p: math.dist(p, around))
     for p in found[:40]:
         if (not need_fov or sight.in_fov(eye, yaw, pitch, (p[0] + .5, p[1] + .5, p[2] + .5))) \
@@ -40,20 +41,20 @@ def nearest_visible(ctx, ids, around, radius=10, need_fov=False):
     return None
 
 
-def find_target(ctx, task, ids, near_owner):
+def find_target(ctx, task, ids, near_owner, skip=()):
     """'this X' is by you: look from where Keve is, then walk over to you and look again,
     then turn around once. None when it's nowhere in sight."""
     o = ctx.owner()
     around = o[1] if (near_owner and o) else ctx.eye_and_view()[3]
-    p = nearest_visible(ctx, ids, around)
+    p = nearest_visible(ctx, ids, around, skip=skip)
     if p is None and o and near_owner and math.dist(ctx.eye_and_view()[3], o[1]) > 3:
         ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 2.5 --timeout 10")
         if task.done():
             return None
-        p = nearest_visible(ctx, ids, around)
+        p = nearest_visible(ctx, ids, around, skip=skip)
     if p is None:
         ctx.look_around(lambda n: base(n) in ids)
-        p = nearest_visible(ctx, ids, around)
+        p = nearest_visible(ctx, ids, around, skip=skip)
     return p
 
 
@@ -88,48 +89,101 @@ class BreakBlocks(Task):
         done = 0
         endless = self.args.get("endless")
         explores = 0
+        skip = set()  # blocks that couldn't be broken from here: not tried again
+        if tool in TOOLS:
+            ctx.select_best(TOOLS[tool])
         while done < want and not self.done():
             if endless and self.guard(owner_radius=8.0, self_radius=5.0):
                 continue  # help with the fight, then back to it
-            p = find_target(ctx, self, ids, near_owner)
-            if p is None and endless and explores < 300:
-                explores += 1  # none in sight: wander a bit and look again
-                import random
-                pos = ctx.eye_and_view()[3]
-                ang = random.uniform(0, 2 * math.pi)
-                ctx.body.call(f"goto {pos[0] + 12 * math.cos(ang):.1f} {pos[1]:.1f} "
-                              f"{pos[2] + 12 * math.sin(ang):.1f} --near 3 --timeout 12 --direct")
-                continue
-            if p is None:
-                break
-            walk_to_reach(ctx, p)
+            # Like a player: everything of this kind in reach and in sight gets broken in
+            # one go, one after the other, before walking on and picking the drops up.
+            batch = in_reach(ctx, ids, skip)
+            if not batch:
+                p = find_target(ctx, self, ids, near_owner, skip)
+                if p is None and endless and explores < 300:
+                    explores += 1  # none in sight: wander a bit and look again
+                    import random
+                    pos = ctx.eye_and_view()[3]
+                    ang = random.uniform(0, 2 * math.pi)
+                    ctx.body.call(f"goto {pos[0] + 12 * math.cos(ang):.1f} {pos[1]:.1f} "
+                                  f"{pos[2] + 12 * math.sin(ang):.1f} --near 3 --timeout 12 --direct")
+                    continue
+                if p is None:
+                    break
+                walk_to_reach(ctx, p)
+                batch = in_reach(ctx, ids, skip) or [p]
             if tool in TOOLS:
                 ctx.select_best(TOOLS[tool])
-            ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
-            r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 20")
-            if self.done():
-                return
-            if r.get("error"):
-                ctx.say(f"couldn't break that {label}: {r['error'].split(';')[0]}")
-                break
-            done += 1
-            if endless and done % 16 == 0:
-                inv = ctx.body.call("inventory")
-                if len([s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]) >= 35:
-                    ctx.say(f"my pockets are FULL! {done} {label} so far.")
+            for p in batch:
+                if self.done() or done >= want:
+                    break
+                ok = self.break_one(p, label)
+                if self.done():
                     return
-                ctx.say(f"{done} {label} and counting!")
-            ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))
-            time.sleep(0.8)
-            if not ctx.collect(5, self):
-                time.sleep(0.6)  # the drop was still bouncing: once more
-                ctx.collect(5, self)
+                if not ok:
+                    skip.add(p)
+                    continue
+                done += 1
+                ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))
+                if endless and done % 16 == 0:
+                    inv = ctx.body.call("inventory")
+                    if len([s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]) >= 35:
+                        ctx.say(f"my pockets are FULL! {done} {label} so far.")
+                        return
+                    ctx.say(f"{done} {label} and counting!")
+            time.sleep(0.6)  # the last drops settle (and can't be picked up for 0.5 s)
+            ctx.collect(6, self)
         if self.done():
             return
         if done:
             ctx.say(f"broke the {label}." if want == 1 else f"got {done} {label}.")
         else:
             ctx.say(f"I don't see any {label} around here.")
+
+
+    SOFT = ("leaf_litter", "short_grass", "tall_grass", "fern", "snow", "flower", "dandelion", "poppy",
+            "mushroom", "sapling", "dead_bush", "vine", "moss_carpet", "carpet", "petals", "torch")
+
+    def break_one(self, p, label):
+        """Look at and break one block. Something thin on top of it (leaf litter, a snow
+        layer, a flower) that hides it gets knocked off first."""
+        ctx = self.ctx
+        for _ in range(2):
+            ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
+            r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 20")
+            err = r.get("error")
+            if not err:
+                return True
+            m = re.search(r"(minecraft:[a-z_]+) at \[(-?\d+), (-?\d+), (-?\d+)\] is in the way", err)
+            if not m or not any(k in m.group(1) for k in self.SOFT):
+                return False
+            q = (int(m.group(2)), int(m.group(3)), int(m.group(4)))
+            ctx.body.call(f"look-at block {q[0]} {q[1]} {q[2]}")
+            if ctx.body.call(f"break {q[0]} {q[1]} {q[2]} --timeout 5").get("error"):
+                return False
+        return False
+
+
+def in_reach(ctx, ids, skip=()):
+    """Every block of `ids` Keve can see and reach from where it stands, in an order that
+    sweeps across them (row by row) instead of jumping around. Never the block under
+    Keve's own feet or yours."""
+    eye, _, _, pos = ctx.eye_and_view()
+    snap = sight.Snapshot.read(ctx.senses, eye, rh=5, rv=4)
+    under = {(math.floor(pos[0]), math.floor(pos[1]) - 1, math.floor(pos[2]))}
+    o = ctx.owner()
+    if o:
+        under.add((math.floor(o[1][0]), math.floor(o[1][1]) - 1, math.floor(o[1][2])))
+    out = []
+    for p, n in snap.blocks.items():
+        if base(n) not in ids or p in skip or p in under:
+            continue
+        if math.dist(eye, (p[0] + .5, p[1] + .5, p[2] + .5)) > 4.4:
+            continue
+        if snap.block_visible(eye, p, 5.0):
+            out.append(p)
+    out.sort(key=lambda p: (-p[1], p[0], p[2] if p[0] % 2 == 0 else -p[2]))
+    return out
 
 
 class UseBlock(Task):

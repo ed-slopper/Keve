@@ -92,10 +92,13 @@ class Keve:
         speaker = self.owner or self.args.owner
         if not speaker:
             return
+        self.via_voice = True  # what's heard isn't learned as a phrase (mishearings vary)
         try:
             self.handle_chat(speaker, heard)
         except Exception:
             traceback.print_exc()
+        finally:
+            self.via_voice = False
 
     # --- talking -------------------------------------------------------------------
     def say(self, text):
@@ -233,6 +236,48 @@ class Keve:
             except (KeyError, IndexError):
                 said.append(skill.replace("_", " "))
         return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
+    # --- phrases the translator worked out, kept so they work instantly next time ------
+    @staticmethod
+    def phrase_key(text):
+        t = re.sub(r"[^a-z0-9 ]", " ", text.lower())
+        t = re.sub(r"\b(kev|kevin|keev|kieve)\b", "keve", t)
+        return " ".join(t.split())
+
+    def learned_phrase(self, text):
+        return life.load_memory().get("phrases", {}).get(self.phrase_key(text))
+
+    def learn_phrase(self, text, commands):
+        """Save what you typed -> the commands it meant. Not for voice, and not for words
+        that depend on the moment ('give it to me' means something else every time)."""
+        key = self.phrase_key(text)
+        if getattr(self, "via_voice", False) or not key or len(key.split()) > 14:
+            return
+        if re.search(r"\b(it|them|that|this|those|these|him|her|its)\b", key):
+            return
+        if key == self.phrase_key(" and ".join(commands)) or key in (self.phrase_key(c) for c in commands):
+            return  # already said the way Keve's rules read it: nothing to learn
+        mem = life.load_memory()
+        phrases = mem.setdefault("phrases", {})
+        if phrases.get(key) == commands:
+            return
+        phrases[key] = commands
+        while len(phrases) > 500:
+            phrases.pop(next(iter(phrases)))
+        life.save_memory(mem)
+        self.last_learned = key
+        journal.log("note", f"learned: '{key}' -> {commands}")
+
+    def forget_phrase(self):
+        key = getattr(self, "last_learned", None)
+        mem = life.load_memory()
+        if key and key in mem.get("phrases", {}):
+            del mem["phrases"][key]
+            life.save_memory(mem)
+            self.last_learned = None
+            self.say(f"ok, forgot that '{key}' means that.")
+        else:
+            self.say("I haven't learned anything new to forget.")
 
     # --- double crouch: "hand me what you've got" ------------------------------------
     def watch_sneaks(self):
@@ -419,7 +464,19 @@ class Keve:
                 route = ("replay", {"demo": demo})
         decision = None
         translated = False
-        if route is None and self.translator.ok:
+        if route is None and re.search(r"\bforget (that|it|what i (just )?said|that one)\b", low):
+            self.forget_phrase()
+            return
+        if route is None:
+            # A wording the translator worked out before ("kev follow m"): no need to ask again.
+            known = self.learned_phrase(low)
+            if known:
+                route = self.route_commands(speaker, low, known)
+                if route is not None:
+                    journal.log("route", f"learned phrase: {known}")
+                    self.last_learned = self.phrase_key(low)  # "forget that" undoes it
+                    translated = True
+        if route is None and self.translator.ok and not translated:
             # Part 2: the translator (Gemma) rewrites what you said into Keve's commands,
             # fixing mishearings and splitting several orders; the tested rules then run them.
             tr = self.translator.translate(speaker, text, self.situation())
@@ -433,6 +490,8 @@ class Keve:
                     return
                 if tr["commands"]:
                     route = self.route_commands(speaker, low, tr["commands"])
+                    if route is not None:
+                        self.learn_phrase(low, tr["commands"])
                 if route is None and not tr["chat"] and not tr["commands"]:
                     translated = False  # it couldn't say: let Kev have a go
         if route is None and self.kev and not translated:
@@ -548,6 +607,9 @@ class Keve:
                     except CtlError:
                         pass
                     self.say(brain.line("died", "I died... ugh. respawning."))
+                    put_head = getattr(self.args, "put_head", None)
+                    if put_head:  # the robot head vanished with him: a new one once he's back
+                        threading.Timer(3.0, put_head).start()
             last = max(last, r.get("last", last))
             time.sleep(0.25)
 

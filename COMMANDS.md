@@ -213,3 +213,7 @@ Without Ollama, the keyword rules do all of this on their own.
 - **Commands:** it can't send `/` commands, or any command that isn't on its whitelist (`companion/ctl.py`).
 - **Where you are:** Keve always knows where you are, as the locator bar shows teammates.
 - **Survival:** it swims up when it's out of air, and steps out of lava or fire.
+
+## Keve learns your wording
+
+When the translator works out what you meant from something new ("kev follow m", "yo chuck me some logs"), Keve saves that wording in `memory.json`. Next time you type it, he does it right away without asking the model. He doesn't learn what he hears by voice (mishearings vary), or wording with "it" / "them" / "that" in it, since what those mean changes. If he learned something wrong, say `keve forget that` right after.

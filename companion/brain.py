@@ -43,10 +43,11 @@ NUMBER_WORDS = {"a": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "s
 
 RULES = [
     (r"\b(stop|cancel|halt|nevermind|never mind|freeze)\b", "stop"),
+    # Defend keeps by your side too, so 'kill mobs as you follow me' is this one.
+    (r"\b(defend|protect|guard|fight|kill (the |some |all (the )?|any )?(mobs|monsters|hostiles|enemies|zombies|them|bad guys))\b", "defend"),
     (r"\b(follow|come with|let'?s go|stick with|tag along)\b", "follow"),
     (r"\b(come( here| over| back)?|over here|get over here|to me)\b", "come"),
     (r"\b(stay|wait( here)?|stand (still|here)|hold (on|up|position))\b", "stay"),
-    (r"\b(defend|protect|guard|fight|kill (the )?(mobs|monsters|zombies|them))\b", "defend"),
     (r"\b(jump)\b", "jump"),
     (r"\blook at me\b", "look"),
     (r"\b(status|inventory|what (do )?(you|u) (got|have)|how are you doing|hp|health)\b", "status"),

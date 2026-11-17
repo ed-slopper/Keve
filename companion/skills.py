@@ -992,25 +992,27 @@ class Give(Task):
             stuck = stuck + 1 if last_d is not None and d > last_d - 0.3 else 0
             last_d = d
         given = 0
+        start_counts = ctx.counts()
+        total = sum(start_counts.get(i, 0) for i in items)
         for item in items:
             for _ in range(40):  # one stack per drop
                 if task.done():
                     return
                 n = ctx.counts().get(item, 0)
-                if n <= 0:
-                    break
+                if n <= 0 or given >= total:
+                    break  # all handed over (or what's back in his pockets was picked up again)
                 o = ctx.owner() or o
                 # Measured: from about 2 blocks away, aimed at the feet, a dropped stack
                 # lands within a few tenths of a block of them. Closer than 1.5 and it lands
                 # under both players and Keve picks it back up; farther and it falls short.
-                for _ in range(10):
+                for _ in range(12):
                     _, _, _, pos = ctx.eye_and_view()
                     d = math.dist(pos, o[1])
-                    if 1.5 <= d <= 2.5 or task.done():
+                    if 1.8 <= d <= 2.6 or task.done():
                         break
-                    if d < 1.5:
+                    if d < 1.8:  # you walked right up to him: back off, or it lands at his feet
                         ctx.body.call(f"look-at entity {o[0]}")
-                        ctx.body.call("move back 0.15")
+                        ctx.body.call("move back 0.3")
                     else:  # they moved off mid hand-over: catch up again
                         ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} "
                                       f"--near 2 --sprint --timeout 2")
@@ -1019,6 +1021,7 @@ class Give(Task):
                 if not ctx.body.call(f"select {item}").get("error"):
                     r = ctx.body.call("drop all")
                     given += (r.get("dropped_from") or {}).get("count", 0)
+                    ctx.body.call("move back 0.4")  # out of reach of the stack before it can be picked up
                 else:
                     # Not on the hotbar: open the inventory, pick the stack up and close it.
                     # A stack still held on the cursor when the screen closes is thrown.
