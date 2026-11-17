@@ -321,6 +321,8 @@ class Ctx:
     def on_hurt(self, event):
         """Keve got hurt: remember who did it (neutral mobs fight back when provoked)."""
         text = str(event).lower()
+        if "arrow" in text or "trident" in text:
+            self.shot_at = time.time()  # an archer somewhere out there: look further for it
         for kind in NEUTRAL | HOSTILE:
             if kind in text:
                 self.provoked[kind] = time.time()
@@ -553,12 +555,14 @@ class Ctx:
         self.body.call("wait 30")  # the fall
         return True
 
-    def maybe_eat(self):
+    def maybe_eat(self, below=14):
+        """Eat when hungry. Healing needs a nearly full belly (18+), so a hurt Keve eats
+        sooner (below=19)."""
         try:
             food = self.state()["player"]["food"]
         except Exception:
             return
-        if food <= 14:
+        if food <= below:
             f = self.select_best(FOODS)
             if f:
                 self.body.call("use-item --hold 1.8")
@@ -589,6 +593,15 @@ class Task:
         targets = ctx.visible_hostiles(pos, self_radius)
         if o:
             targets += ctx.visible_hostiles(o[1], owner_radius)
+        if not targets and time.time() - getattr(ctx, "shot_at", 0) < 5:
+            # Shot at: the archer is further off. Go get it (if he's not too hurt for it).
+            try:
+                health = ctx.state()["player"].get("health", 20)
+            except Exception:
+                health = 20
+            if health > 7:
+                targets = [m for m in ctx.visible_hostiles(pos, 20)
+                           if m.get("type", "").removeprefix("minecraft:") in RANGED]
         if not targets:
             return False
         m = min(targets, key=lambda m: m["distance"])
@@ -598,6 +611,9 @@ class Task:
         ctx.select_best(WEAPONS)
         ctx.hunt(m["id"], 10.0, self)
         return True
+
+
+RANGED = {"skeleton", "stray", "bogged", "pillager", "piglin", "drowned", "witch", "blaze", "ghast", "parched"}
 
 
 class Come(Task):

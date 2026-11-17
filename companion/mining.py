@@ -10,7 +10,7 @@ import time
 
 import craft
 import sight
-from skills import (GATHER, PICKAXES, Gather, Give, Task, base)
+from skills import (FOODS, GATHER, PICKAXES, Gather, Give, Task, base)
 
 # ore: (blocks, drops, pickaxe tier needed, best Y)
 ORES = {
@@ -497,6 +497,10 @@ class Mine(Task):
             return True
         st = self.ctx.state()["player"]
         if st["health"] <= 6:
+            if self.heal():
+                return False  # patched up: on with the trip
+            if self.done():
+                return True
             self.ctx.say("I'm hurt, getting out of here!")
             return True
         inv = self.ctx.body.call("inventory")
@@ -509,6 +513,35 @@ class Mine(Task):
                 self.ctx.say("my pickaxe broke and I can't make another.")
                 return True
             self.ctx.select_best(PICKAXES)
+        return False
+
+    def heal(self):
+        """Hurt mid-trip: back up the stairs out of the fight, eat, and wait to heal up.
+        True when he's well enough to go on (a couple of heals per trip at most)."""
+        ctx = self.ctx
+        self.heals = getattr(self, "heals", 0) + 1
+        if self.heals > 3:
+            return False
+        ctx.say("ouch! backing off to heal up, then I'll keep going.")
+        path = (self.track or {}).get("path") or []
+        if len(path) > 6:
+            back = path[-6]
+            ctx.body.call(f"goto {back[0] + 0.5:.2f} {back[1]:.2f} {back[2] + 0.5:.2f} --near 1 --timeout 8 --sprint")
+        end = time.time() + 90
+        while time.time() < end and not self.done():
+            if self.guard(owner_radius=0.0, self_radius=4.0):
+                continue  # something followed him: deal with it
+            ctx.maybe_eat(below=19)
+            try:
+                st = ctx.state()["player"]
+            except Exception:
+                return False
+            if st.get("health", 0) >= 14:
+                ctx.say("feeling better! back to it.")
+                return True
+            if st.get("food", 20) < 18 and not ctx.has(FOODS):
+                break  # no food: he won't heal (health comes back only when well fed)
+            time.sleep(2.0)
         return False
 
     def upgrade_to_iron(self):
