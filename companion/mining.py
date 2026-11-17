@@ -623,6 +623,20 @@ class Mine(Task):
             p = tuple(p)
             tunnel |= {p, (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])}
         snap = self.snap(opened[0], 5)
+        # Open air the sky reaches is just outside (the top of the stairs), not a cave.
+        lo = (at[0] - 6, at[1] - 6, at[2] - 6)
+        try:
+            lit = self.ctx.senses.call(f"light {lo[0]} {lo[1]} {lo[2]} {at[0] + 6} {at[1] + 6} {at[2] + 6}")
+            sky_s = lit.get("sky", "")
+        except Exception:
+            sky_s = ""
+
+        def outdoors(c):
+            i = ((c[1] - lo[1]) * 13 + (c[2] - lo[2])) * 13 + (c[0] - lo[0])  # x fastest, then z, then y
+            if not (0 <= c[0] - lo[0] < 13 and 0 <= c[1] - lo[1] < 13 and 0 <= c[2] - lo[2] < 13):
+                return False
+            ch = sky_s[i] if 0 <= i < len(sky_s) else "."
+            return ch != "." and int(ch, 16) >= 10
         holes = set()
         for c in opened:
             for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
@@ -630,7 +644,7 @@ class Mine(Task):
                 if n in tunnel:
                     continue
                 name = snap.name(n)
-                if not is_solid(name) and not sight.is_fluid(name) and "torch" not in name:
+                if not is_solid(name) and not sight.is_fluid(name) and "torch" not in name and not outdoors(n):
                     holes.add(n)
         if not holes:
             return True
@@ -643,7 +657,7 @@ class Mine(Task):
                 if n in seen or n in tunnel or math.dist(n, at) > 6:
                     continue
                 name = snap.name(n)
-                if not is_solid(name) and not sight.is_fluid(name):
+                if not is_solid(name) and not sight.is_fluid(name) and not outdoors(n):
                     seen.add(n)
                     todo.append(n)
         if len(seen) < 4:
