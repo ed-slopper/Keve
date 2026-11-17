@@ -129,6 +129,7 @@ No sapling on hand: Keve breaks nearby leaves until one drops, then plants it.
 | `keve replace the floor with cobblestone` / `keve make the floor oak planks` | Swaps the floor blocks of the room you are in for that block. It replaces the real floor, not on top of it, lifts stray blocks sitting on the floor, and fills holes. If he is short, he takes more from a nearby chest. He skips the block you are standing on |
 | `keve replace the wall with cobble` / `keve replace the walls with stone bricks` | "the wall" is the wall nearest you (Keve cannot tell where you are looking). "the walls" / "all the walls" does every wall, floor to ceiling |
 | `keve dig me out` / `keve im stuck` / `keve mine a hole so i can get out` | Keve tunnels from where he is to you, 2 high, and stops once you are joined up |
+| `keve mine to me` / `keve mine over here` / `keve mine to 67 -39 -17` / `keve mine straight 10 blocks` | Tunnels 2 high to you, to those coordinates, or straight ahead, boarding up caves and plugging lava on the way. `keve come here` does this by itself when there is no way to walk to you |
 
 How it lights a room:
 - **What counts as the room:** the space you could walk to from where you stand, inside walls, within about 9 blocks.

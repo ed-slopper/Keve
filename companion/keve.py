@@ -35,7 +35,7 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
                                            blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest,
-                                           life.Ride, life.GetOut, life.Recover, life.Sleep)})
+                                           life.Ride, life.GetOut, life.Recover, life.Sleep, room.DigTo)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
                "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 
@@ -529,8 +529,9 @@ class Keve:
                     return
                 if tr["commands"]:
                     route = self.route_commands(speaker, low, tr["commands"])
-                    if route is not None:
-                        self.learn_phrase(low, tr["commands"])
+                    steps = route[1].get("steps", []) if route and route[0] == "sequence" else [route] if route else []
+                    if route is not None and not any(s and s[0] in ("cant", "companion") for s in steps):
+                        self.learn_phrase(low, tr["commands"])  # only wordings that led somewhere
                 if route is None and not tr["chat"] and not tr["commands"]:
                     translated = False  # it couldn't say: let Kev have a go
         if route is None and self.kev and not translated:

@@ -26,7 +26,7 @@ keve place a crafting table | keve place a furnace | keve plant a sapling | keve
 keve make a stone pickaxe | keve make a stone sword | keve make a stone hoe | keve make an iron axe | keve craft 16 torches | keve make a furnace | keve make a crafting table
 keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest | keve put the stone pickaxe in the chest | keve make a chest and put the wood in it | keve give me the stone pickaxe
 keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some leather | keve defend me
-keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks | keve dig me out |
+keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks | keve dig me out | keve mine to me | keve mine to 67 -39 -17 | keve mine straight 10 blocks |
 keve place torches in this room | keve what do you see | keve what you got | keve help
 keve this is home | keve go home | keve remember this as the mine | keve go to the mine
 keve sleep in the bed | keve get in the boat with me | keve get out of the boat | keve play with me | keve watch me <do something> | keve did you see | keve copy what i did"""
@@ -83,6 +83,8 @@ Examples:
 "make a chest and store the wood in it" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it"], "chat": false}}
 "make a new chest outside there for the wood, also make new stone axes as u need" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it", "keve make a stone axe"], "chat": false}}
 "keve get a stone shovel and mine out the grass" -> {{"addressed": true, "commands": ["keve make a stone shovel", "keve mine out the grass"], "chat": false}}
+"keve u need to mine over here" -> {{"addressed": true, "commands": ["keve mine to me"], "chat": false}}
+"come mine to me im at 67 -39 -17" -> {{"addressed": true, "commands": ["keve mine to 67 -39 -17"], "chat": false}}
 "faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}

@@ -457,6 +457,9 @@ class Mine(Task):
         if tier >= 2 and self.prov.pick_tier() < 2:
             self.wanted |= {"iron", "coal"}
             ctx.say(f"{ore} needs an iron pickaxe, I'll grab iron on the way down.")
+        self.pack_kit(best_y)
+        if self.done():
+            return
         ctx.select_best(PICKAXES)
         p = ctx.state()["player"]
         self.home = tuple(p["position"])
@@ -530,11 +533,86 @@ class Mine(Task):
             self.ctx.say("my inventory is full.")
             return True
         if self.prov.pick_tier() < 0:
-            if not self.prov.ensure_pickaxe(1):
-                self.ctx.say("my pickaxe broke and I can't make another.")
+            if not self.new_pickaxe_down_here():
+                self.ctx.say("my pickaxe broke and I've got nothing to make another. heading up!")
                 return True
             self.ctx.select_best(PICKAXES)
         return False
+
+    # --- the kit for a long trip ----------------------------------------------------
+    DURABILITY = {"wooden_pickaxe": 59, "stone_pickaxe": 131, "iron_pickaxe": 250, "diamond_pickaxe": 1561,
+                  "netherite_pickaxe": 2031, "golden_pickaxe": 32}
+
+    def pack_kit(self, best_y):
+        """Before a long dig, work out what it'll take, like a player packing: about three
+        blocks per level of staircase plus a few hundred of branch mining, against how
+        long a pickaxe lasts. Spare pickaxes (two made now), sticks for the rest (the
+        stone comes from the digging), a crafting table to carry, and torches if there's
+        coal. Short trips need none of it."""
+        ctx = self.ctx
+        here_y = ctx.state()["player"]["block_pos"][1]
+        blocks = max(0, here_y - best_y) * 3 + 300
+        tier = self.prov.pick_tier()
+        pick = TIER_PICK.get(min(max(tier, 1), 2), "stone_pickaxe")
+        if pick == "iron_pickaxe" and self.counts_of("iron_ingot") < 6:
+            pick = "stone_pickaxe"  # spares he can actually make
+        picks = max(1, math.ceil(blocks / self.DURABILITY[pick]))
+        if picks <= 1:
+            return
+        have = sum(self.counts_of(p) for p in TIER_PICK.values() if PICK_TIER[p] >= PICK_TIER[pick])
+        spares = min(picks, 3)  # a pickaxe in hand and two spares; the rest as sticks
+        sticks = 2 * max(0, picks - spares)
+        kit = [(pick, spares), ("stick", sticks), ("crafting_table", 1)]
+        if self.counts_of("coal") + self.counts_of("charcoal"):
+            kit.append(("torch", 16))
+        want = [(i, n) for i, n in kit if n and self.prov.crafter.count(i) < n]
+        if not want:
+            return
+        shown = ", ".join(f"{n} {i.replace('_', ' ')}{'s' if n > 1 and not i.endswith('h') else ''}"
+                          for i, n in want)
+        ctx.say(f"a trip this long wears out about {picks} {pick.replace('_', ' ')}s. "
+                f"packing {shown} first!")
+        try:
+            needs = self.prov.crafter.raw_needs_many([(i, n - self.prov.crafter.count(i)) for i, n in want])
+            for raw, n in needs.items():
+                if self.done() or not self.prov.get_raw(raw, n, 0):
+                    break
+            for i, n in want:
+                if self.done():
+                    return
+                if i == "crafting_table":
+                    self.take_table_along()
+                if self.prov.crafter.count(i) < n:
+                    self.prov.ensure(i, n)
+        except (RuntimeError, craft.NeedMore) as e:
+            ctx.say(f"couldn't pack everything ({e}), going with what I've got.")
+        self.take_table_along()
+
+    def take_table_along(self):
+        """The crafting table he just used goes in his pocket, for making pickaxes down there."""
+        if self.prov.crafter.count("crafting_table"):
+            return
+        here = self.ctx.eye_and_view()[3]
+        for pos in list(self.ctx.placed_stations):
+            if math.dist(here, pos) <= 6:
+                self.prov.crafter.pick_up_station(pos)
+                self.ctx.placed_stations.remove(pos)
+                return
+
+    def new_pickaxe_down_here(self):
+        """The pickaxe broke mid-trip: a new one from what he carries (cobble from the dig,
+        sticks and the table from his kit), then the table back in his pocket."""
+        only = getattr(self.prov, "only_inventory", False)
+        self.prov.only_inventory = True
+        try:
+            ok = self.prov.ensure_pickaxe(1)
+        except (RuntimeError, craft.NeedMore):
+            ok = False
+        self.prov.only_inventory = only
+        if ok:
+            self.ctx.say("pickaxe broke, made a new one!")
+            self.take_table_along()
+        return ok
 
     def heal(self):
         """Hurt mid-trip: back up the stairs out of the fight, eat, and wait to heal up.

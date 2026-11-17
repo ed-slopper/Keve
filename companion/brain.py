@@ -171,6 +171,7 @@ class Kev:
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
         "sleep": "Sleep in a bed",
+        "dig_to": "Dig a tunnel to the player, to coordinates, or straight ahead",
         "ride": "Get in the boat or minecart with the player",
         "new_chest": "Make a new chest, put it down here, and store things in it",
         "rescue": "Dig the player out when they are stuck or trapped",
@@ -360,7 +361,29 @@ GET_OUT = re.compile(r"\b(get|hop|climb|jump) (out|off)\b|\bdismount\b|\bleave t
 SLEEP = re.compile(r"\b(sleep|go to (bed|sleep)|get in (the |this |that |a )?bed|lie down|take a nap|nap)\b")
 
 
+DIG_VERB = r"\b(mine|dig|tunnel|tunel|bore|cut)\b"
+
+
+def route_dig_to(text):
+    """'mine to me' / 'mine over here' / 'mine straight 10 blocks' / 'mine to 67 -39 -17'."""
+    if not re.search(DIG_VERB, text):
+        return None
+    xyz = re.search(r"(-?\d+)[ ,]+(-?\d+)[ ,]+(-?\d+)", text)
+    if xyz:
+        return "dig_to", {"target": [int(xyz.group(1)) + 0.5, int(xyz.group(2)), int(xyz.group(3)) + 0.5]}
+    ahead = re.search(r"\b(straight|forward|ahead|in front)\b.*?(\d+)|(\d+) blocks? (straight|forward|ahead)", text)
+    if ahead:
+        return "dig_to", {"ahead": min(64, int(ahead.group(2) or ahead.group(3)))}
+    if re.search(r"\b(to|towards?|toward|over to|through to) (me|us|where i am|my spot)\b|\b(over|right) here\b"
+                 r"|\bto my (cords|coords|coordinates|location|position)\b", text):
+        return "dig_to", {}
+    return None
+
+
 def reflex_route(text):
+    dig = route_dig_to(text)
+    if dig:
+        return dig
     if SLEEP.search(text):
         return "sleep", {}
     if RIDE.search(text):

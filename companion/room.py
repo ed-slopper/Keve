@@ -384,11 +384,20 @@ class Rescue(Task):
     front of him, one block at a time, the way he'd dig any tunnel."""
     name = "rescue"
     MAX_BLOCKS = 24
+    START = "hang on buddy, I'm coming to dig you out!"
+    DONE = "FREEDOM! you're out, buddy!"
+
+    def goal(self):
+        """Where to dig to: you (wherever you are now), or a fixed spot."""
+        t = self.args.get("target")
+        if t:
+            return tuple(t)
+        o = self.ctx.owner()
+        return tuple(o[1]) if o else None
 
     def run(self):
         ctx = self.ctx
-        o = ctx.owner()
-        if not o:
+        if self.goal() is None:
             ctx.say("I can't see where you are! shout louder!")
             return
         import mining
@@ -398,21 +407,22 @@ class Rescue(Task):
         miner = mining.Mine(ctx, ore="coal")
         miner.cancelled = self.cancelled
         miner.prov = prov
-        ctx.say("hang on buddy, I'm coming to dig you out!")
-        ctx.body.call(f"goto {o[1][0]:.2f} {o[1][1]:.2f} {o[1][2]:.2f} --near 1.5 --timeout 12")
+        ctx.say(self.START)
+        g = self.goal()
+        ctx.body.call(f"goto {g[0]:.2f} {g[1]:.2f} {g[2]:.2f} --near 1.5 --timeout 12")
         dug = 0
-        for _ in range(40):
+        for _ in range(int(self.args.get("max_blocks", self.MAX_BLOCKS)) * 2):
             if self.done():
                 return
-            o = ctx.owner()
-            if not o:
+            g = self.goal()
+            if g is None:
                 break
-            ox, oy, oz = (math.floor(v) for v in o[1])
+            ox, oy, oz = (math.floor(v) for v in g)
             me = ctx.state()["player"]["block_pos"]
             mx, my, mz = me
             if abs(ox - mx) + abs(oz - mz) <= 1 and abs(oy - my) <= 1:
                 break  # side by side: joined up
-            # One step toward you, along the longer way first.
+            # One step toward the goal, along the longer way first.
             if abs(ox - mx) >= abs(oz - mz):
                 step = (mx + (1 if ox > mx else -1), mz)
             else:
@@ -437,15 +447,46 @@ class Rescue(Task):
                 miner.plug(cells)
                 ctx.say("lava back there! I plugged it. let's find another way.")
                 return
+            if ty <= my and not miner.seal_cave(cells, tuple(me)):
+                ctx.say("big cave in the way, I boarded it up. go around?")
+                return
             ctx.body.call(f"goto {step[0] + 0.5:.2f} {ty:.2f} {step[1] + 0.5:.2f} --near 0.4 --timeout 3 --direct")
-            if dug >= self.MAX_BLOCKS:
+            if self.guard(owner_radius=0.0, self_radius=4.0):
+                continue
+            if dug >= int(self.args.get("max_blocks", self.MAX_BLOCKS)):
                 break
         ctx.collect(4, self)
         if self.done():
             return
-        o = ctx.owner()
+        g = self.goal()
         me = ctx.state()["player"]["block_pos"]
-        if o and math.dist((math.floor(o[1][0]), math.floor(o[1][2])), (me[0], me[2])) <= 1.5:
-            ctx.say("FREEDOM! you're out, buddy!" + (f" dug {dug} blocks." if dug else ""))
+        if g and math.dist((math.floor(g[0]), math.floor(g[2])), (me[0], me[2])) <= 1.5:
+            ctx.say(self.DONE + (f" dug {dug} blocks." if dug else ""))
         else:
-            ctx.say("I couldn't reach you, try digging toward me!")
+            ctx.say("I couldn't get all the way there, try digging toward me!")
+
+
+class DigTo(Rescue):
+    """'keve mine to me' / 'dig over here' / 'mine to 67 -39 -17' / 'mine straight 10 blocks':
+    a 2-high tunnel to you, to those coordinates, or straight ahead."""
+    name = "dig_to"
+    MAX_BLOCKS = 160
+    START = "digging my way over!"
+    DONE = "made it through!"
+
+    def run(self):
+        n = self.args.get("ahead")
+        if n:
+            p = self.ctx.state()["player"]
+            dx, dz = mining_dir(p["yaw"])
+            x, y, z = p["block_pos"]
+            self.args["target"] = (x + dx * int(n) + 0.5, y, z + dz * int(n) + 0.5)
+            self.START, self.DONE = f"tunnelling {n} blocks straight ahead!", "tunnel's done!"
+        elif self.args.get("target"):
+            self.START = "digging to {:.0f} {:.0f} {:.0f}!".format(*self.args["target"])
+        super().run()
+
+
+def mining_dir(yaw):
+    import mining
+    return mining.DIRS[round(((yaw % 360) / 90)) % 4]

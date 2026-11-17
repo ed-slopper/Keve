@@ -642,6 +642,16 @@ class Come(Task):
         if r.get("arrived"):
             self.ctx.body.call(f"look-at entity {o[0]}")
             self.ctx.say(random.choice(["here.", "what's up?", "made it.", "I'm here."]))
+            return
+        pos = self.ctx.eye_and_view()[3]
+        o = self.ctx.owner() or o
+        if math.dist(pos, o[1]) < 80:
+            # No way to walk there (you're through the rock, down a shaft...): dig to you.
+            self.ctx.say("no way through, I'll dig to you!")
+            import room
+            t = room.DigTo(self.ctx)
+            t.cancelled = self.cancelled
+            t.run()
         else:
             self.ctx.say(f"couldn't get to you ({r.get('error', 'no path')}).")
 
