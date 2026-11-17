@@ -25,7 +25,7 @@ INGREDIENTS = {
     "furnace": lambda i: i == "minecraft:furnace",
 }
 for _tool in ("wooden", "stone", "iron", "diamond", "golden", "netherite"):
-    for _kind in ("pickaxe", "sword", "axe", "shovel"):
+    for _kind in ("pickaxe", "sword", "axe", "shovel", "hoe"):
         INGREDIENTS[f"{_tool}_{_kind}"] = (lambda name: (lambda i: i == "minecraft:" + name))(
             f"{_tool}_{_kind}")
 INGREDIENTS["torch"] = lambda i: i == "minecraft:torch"
@@ -44,6 +44,7 @@ for _tool, _mat in (("wooden", "planks"), ("stone", "cobble"), ("iron", "iron_in
     RECIPES[f"{_tool}_sword"] = (3, {1: _mat, 4: _mat, 7: "stick"}, 1)
     RECIPES[f"{_tool}_axe"] = (3, {0: _mat, 1: _mat, 3: _mat, 4: "stick", 7: "stick"}, 1)
     RECIPES[f"{_tool}_shovel"] = (3, {1: _mat, 4: "stick", 7: "stick"}, 1)
+    RECIPES[f"{_tool}_hoe"] = (3, {0: _mat, 1: _mat, 4: "stick", 7: "stick"}, 1)
 
 FUELS = ["coal", "charcoal", "oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log",
          "dark_oak_log", "cherry_log", "mangrove_log", "pale_oak_log", "oak_planks", "birch_planks",
@@ -172,8 +173,9 @@ class Crafter:
                 time.sleep(0.05)
         finally:
             self.ctx.body.call("close")
-            if size == 3:
-                self.pick_up_station(table)
+            # The table stays out while there's crafting to do; Keve packs it up once he's
+            # been idle a while (skills.Idle), like a player would.
+            self.ctx.last_craft_time = time.time()
 
     def _fill(self, pattern, grid):
         """Put one ingredient in each cell of the pattern."""
@@ -197,8 +199,23 @@ class Crafter:
                 self.click(src)  # put the rest back
 
     # --- placing a crafting table / furnace next to Keve -------------------------------
+    def placed_station(self, kind):
+        """A table or furnace already standing within reach that Keve can see (his own from
+        the last craft, or yours): use that instead of putting another one down."""
+        eye = tuple(self.ctx.state()["player"]["eye"])
+        snap = sight.Snapshot.read(self.ctx.senses, eye, rh=5, rv=3)
+        spots = sorted((p for p, n in snap.blocks.items() if n.split("[")[0] == "minecraft:" + kind),
+                       key=lambda p: math.dist(p, eye))
+        for p in spots:
+            if math.dist(eye, (p[0] + .5, p[1] + .5, p[2] + .5)) <= 4.3 and snap.block_visible(eye, p, 5.0):
+                return p
+        return None
+
     def ensure_station(self, kind):
-        """A placed table or furnace within reach: Keve places its own."""
+        """A placed table or furnace within reach: one that's already out, or Keve places his own."""
+        there = self.placed_station(kind)
+        if there:
+            return there
         if self.count(kind) == 0:
             if kind not in RECIPES:
                 raise NeedMore(kind, 1)
@@ -207,6 +224,8 @@ class Crafter:
         for spot in self.free_spots():
             r = self.ctx.place(spot, kind)
             if not r.get("error"):
+                if kind == "crafting_table":
+                    self.ctx.placed_stations.append(tuple(spot))
                 return spot
             last = r["error"]
         raise RuntimeError(f"couldn't put a {kind.replace('_', ' ')} down ({last})")

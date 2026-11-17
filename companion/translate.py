@@ -23,7 +23,7 @@ keve mine for diamonds | keve mine 10 iron | keve mine some coal | keve go minin
 keve mine this coal | keve break that glass | keve dig this dirt | keve chop that birch log | keve get me 10 andesite
 keve open that door | keve pull the lever | keve press the button
 keve place a crafting table | keve place a furnace | keve plant a sapling | keve plant 3 oak saplings | keve plant the seeds
-keve make a stone pickaxe | keve make an iron sword | keve craft 16 torches | keve make a furnace | keve make a crafting table
+keve make a stone pickaxe | keve make a stone sword | keve make a stone hoe | keve make an iron axe | keve craft 16 torches | keve make a furnace | keve make a crafting table
 keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest | keve put the stone pickaxe in the chest | keve give me the stone pickaxe
 keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some leather | keve defend me
 keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks | keve dig me out |
@@ -50,6 +50,7 @@ Rules:
 - The player stuck, trapped or asking to be mined/dug out is "keve dig me out" (nothing else, no diamonds).
 - "faster", "hurry", "come on", "good job" are chat, never a new command.
 - "ok", "okay", "nice", "thanks", "cool" on their own are chat, never "come here".
+- Keep the player's material: "stone sword" is "keve make a stone sword", never iron or wooden.
 - Keep the exact item the player names: "put the X in the chest" is never "put your stuff in the chest". "your stuff" is only for everything.
 - "it"/"that" with give/put means what Keve just made or got (given in "Right now").
 - Never output placeholders like [item] or <item>. If you don't know the item, use the closest real one or leave it out.
@@ -71,6 +72,8 @@ Examples:
 "keve stop im stuck, mine a hole in the wall to save me" -> {{"addressed": true, "commands": ["keve dig me out"], "chat": false}}
 "can u put the stone pic in the chest" -> {{"addressed": true, "commands": ["keve put the stone pickaxe in the chest"], "chat": false}}
 "give it to me" (Keve just made a stone pickaxe) -> {{"addressed": true, "commands": ["keve give me the stone pickaxe"], "chat": false}}
+"make me stone sword" -> {{"addressed": true, "commands": ["keve make a stone sword"], "chat": false}}
+"make all the stone tools and put them in the chest" -> {{"addressed": true, "commands": ["keve make a stone pickaxe", "keve make a stone axe", "keve make a stone shovel", "keve make a stone hoe", "keve make a stone sword", "keve put the stone tools in the chest"], "chat": false}}
 "faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}
@@ -124,5 +127,5 @@ class Translator:
             if not c.startswith("keve"):
                 c = "keve " + c
             cmds.append(c)
-        return {"addressed": bool(out.get("addressed")), "commands": cmds[:6],
+        return {"addressed": bool(out.get("addressed")), "commands": cmds[:8],
                 "chat": bool(out.get("chat")) and not cmds}

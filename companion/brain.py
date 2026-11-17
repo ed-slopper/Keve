@@ -360,13 +360,13 @@ def find_ore(text):
 
 def find_craftable(text):
     """'make me a stone pickaxe' -> 'stone_pickaxe'; '16 torches' -> 'torch'."""
-    t = " " + text + " "
+    t = " " + fix_typos(text) + " "
     mat = None
     for m, w in (("wooden", r"\bwood(en)?\b"), ("stone", r"\bstone\b|\bcobble"), ("iron", r"\biron\b")):
         if re.search(w, t):
             mat = m
             break
-    for tool in ("pickaxe", "sword", "axe", "shovel"):
+    for tool in ("pickaxe", "sword", "axe", "shovel", "hoe"):
         if re.search(rf"\b{tool}s?\b", t) or (tool == "pickaxe" and re.search(r"\bpicks?\b|\bpi[ck]{1,2}ax(e|es)?\b|\bpick ax(e|es)?\b", t)):
             return f"{mat or 'stone'}_{tool}"
     for word, item in (("torch", "torch"), ("crafting table", "crafting_table"),
@@ -437,7 +437,7 @@ def named_item(text):
     Plain gather words (wood, sand) don't count: those mean 'some of that'."""
     text = fix_typos(text)
     tool = find_craftable(text)
-    if tool and re.search(r"_(pickaxe|sword|axe|shovel)$", tool):
+    if tool and re.search(r"_(pickaxe|sword|axe|shovel|hoe)$", tool):
         return "minecraft:" + tool
     import world_names
     names = world_names.names()
@@ -463,7 +463,7 @@ def route_give_item(text):
     if not item:
         # "give me a pickaxe" (no material named): the tool Keve would make, stone by default.
         tool = find_craftable(text)
-        if not (tool and re.search(r"_(pickaxe|sword|axe|shovel)$", tool)):
+        if not (tool and re.search(r"_(pickaxe|sword|axe|shovel|hoe)$", tool)):
             return None
         item, label = "minecraft:" + tool, tool.replace("_", " ")
     # A plain gather word ("wood", "sand") or an ore: those routes know them. A longer
@@ -517,7 +517,14 @@ def route_chest(text):
     count = parse_count(text)
     text = fix_typos(text)
     # A particular item ("the stone pickaxe") beats a gather word inside it ("stone").
-    named = named_item(re.sub(r"\b(chests?|barrels?)\b", " ", text))
+    tools = re.search(r"\b(?:(wood(?:en)?|stone|iron|diamond|gold(?:en)?|netherite) )?tools\b", text)
+    if tools:  # "the stone tools": every stone pickaxe, axe, shovel, hoe and sword
+        mat = tools.group(1) or ""
+        mat = {"wood": "wooden", "gold": "golden"}.get(mat, mat)
+        named = f"minecraft:{mat + '_' if mat else ''}tools"
+    else:
+        named = None
+    named = named or named_item(re.sub(r"\b(chests?|barrels?)\b", " ", text))
     word = (named.removeprefix("minecraft:") if named else None) or find_item(text) or find_ore(text)         or find_craftable(text)
     craftable = find_craftable(text)
     if craftable and re.search(r"\b(make|craft|build)\b", text):

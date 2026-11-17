@@ -230,7 +230,14 @@ class Keve:
 
     def keep_named_item(self, original, skill, args):
         """The translator said 'put your stuff in the chest' for 'put the stone pic in the
-        chest', or 'bring me the item' for 'give it to me': put the actual item back."""
+        chest', or 'bring me the item' for 'give it to me': put the actual item back.
+        And 'make me a stone sword' stays stone even if the translation says iron."""
+        if skill == "craft" and args.get("item"):
+            said = brain.find_craftable(original.lower())
+            kind = lambda it: it.rsplit("_", 1)[-1]
+            if said and "_" in said and "_" in args["item"] and kind(said) == kind(args["item"])                     and re.search(r"\b(wood(en)?|stone|cobble|iron|diamond|gold(en)?)\b", original.lower())                     and said != args["item"]:
+                return skill, dict(args, item=said)
+            return skill, args
         if skill not in ("put", "give") or args.get("items") or args.get("item"):
             return skill, args
         if re.search(r"\b(everything|all|your stuff|your things|inventory|all your)\b", original.lower()):

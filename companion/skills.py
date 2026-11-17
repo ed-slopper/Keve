@@ -71,6 +71,8 @@ class Ctx:
         self.self_name = self_name
         self.memory = {}          # (x, y, z) -> (block name, time seen); filled only by sight
         self.bad_targets = {}     # (x, y, z) -> failures
+        self.placed_stations = []  # tables Keve put down and will pack up when idle
+        self.last_craft_time = 0.0
         self.last_item = None     # what Keve last made or got: 'give it to me' means this
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
         self.last_item = None     # what it gathered last ("bring them to me")
@@ -571,8 +573,38 @@ class Stay(Task):
 
 
 class Idle(Stay):
-    """What Keve does between orders: stand by and fight back."""
+    """What Keve does between orders: stand by, fight back, and once nothing's been crafted
+    for a while, pack up the crafting table he left out."""
     name = "idle"
+    PACK_AFTER = 40
+
+    def run(self):
+        ctx = self.ctx
+        ctx.body.call("stop")
+        home = ctx.eye_and_view()[3]
+        while not self.done():
+            if self.guard(owner_radius=0.0, self_radius=4.0):
+                ctx.body.call(f"goto {home[0]:.2f} {home[1]:.2f} {home[2]:.2f} --near 1 --timeout 6")
+                continue
+            if ctx.placed_stations and time.time() - ctx.last_craft_time > self.PACK_AFTER:
+                self.pack_up()
+            time.sleep(0.5)
+
+    def pack_up(self):
+        import craft
+        ctx = self.ctx
+        crafter = craft.Crafter(ctx, self)
+        here = ctx.eye_and_view()[3]
+        for pos in list(ctx.placed_stations):
+            if self.done():
+                return
+            ctx.placed_stations.remove(pos)
+            if math.dist(here, pos) > 6:
+                continue  # left behind somewhere else: it's part of the world now
+            r = ctx.senses.call(f"blocks {pos[0]} {pos[1]} {pos[2]} {pos[0]} {pos[1]} {pos[2]}")
+            if not any("crafting_table" in b[3] for b in r.get("blocks", [])):
+                continue
+            crafter.pick_up_station(pos)
 
 
 class Gather(Task):

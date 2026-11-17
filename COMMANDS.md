@@ -52,7 +52,7 @@ How it mines:
 
 | You type | Keve does |
 | --- | --- |
-| `keve make a stone pickaxe` / `keve craft an iron sword` | Wooden, stone and iron pickaxes, swords, axes and shovels |
+| `keve make a stone pickaxe` / `keve make a stone hoe` / `keve craft an iron sword` | Wooden, stone and iron pickaxes, swords, axes and shovels |
 | `keve craft 16 torches` / `keve make a furnace` / `keve make a crafting table` | Torches, furnaces, crafting tables, sticks, planks |
 | `... and bring it to me` | Hands it over when it's made |
 

@@ -34,6 +34,10 @@ def item_matcher(word):
     """A chat word (wood, sand, coal, diamonds, torch...) -> a test on item ids."""
     if word is None:
         return lambda i: True
+    if word.endswith("tools"):  # "stone_tools" / "tools"
+        mat = word[:-len("tools")]
+        return lambda i: i.startswith("minecraft:" + mat) and i.rsplit("_", 1)[-1] in (
+            "pickaxe", "axe", "shovel", "hoe", "sword")
     if word in GATHER:
         return GATHER[word][1]
     if word in craft.INGREDIENTS:
