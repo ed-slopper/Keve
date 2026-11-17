@@ -41,6 +41,7 @@ Numbers can be words: "a few", "some", "ten", "a stack". With no number it gets 
 | `keve chop trees until i say stop` / `keve mine trees forever` / `keve mine grass nonstop` / `keve get sand nonstop` | Keeps going until you say stop or his pockets are full, telling you the count every 16 blocks |
 | `keve make a chest and put the wood in it` / `keve make a new chest out here for the logs` | Crafts a chest (or uses one he has), puts it down where he is and fills it. During a nonstop job it becomes the job chest: when his pockets fill up, he empties them there and keeps going |
 | `keve get in the boat with me` / `keve get out of the boat` | Climbs into the boat you are sitting in (he walks up and right-clicks it beside you) and sits tight while you steer. Any other order gets him out first |
+| `keve sleep in this bed` / `keve go to bed` | Walks to the bed you are by (around walls, through the door) and gets in. Only at night or in a thunderstorm |
 | *crouch twice quickly next to Keve* | He hands you what he has for the job (the wood he is chopping, what he made for you), then gets back to it. This needs you joined through the skin proxy, which is the default |
 | `keve get me 10 iron` / `keve go mine some coal` / `keve find gold` | The same for iron (y 16), coal, copper, lapis, gold, redstone and emerald |
 | `keve go mining` | Iron, by default |
@@ -218,3 +219,7 @@ Without Ollama, the keyword rules do all of this on their own.
 ## Keve learns your wording
 
 When the translator works out what you meant from something new ("kev follow m", "yo chuck me some logs"), Keve saves that wording in `memory.json`. Next time you type it, he does it right away without asking the model. He doesn't learn what he hears by voice (mishearings vary), or wording with "it" / "them" / "that" in it, since what those mean changes. If he learned something wrong, say `keve forget that` right after.
+
+## Parkour: Keve learns jumps
+
+While following you, Keve copies your jumps: where you took off and where you landed. Each kind of jump (gap length and height change, like `3.0/+1` for a 3-block gap up one block) has a technique: how far back he runs up, how long he sprints before jumping, and how long he holds forward in the air. It starts from what the physics needs. After every try he keeps it if he made it, takes a longer run-up if he fell short, or jumps earlier if he ran off the edge. What he learned is kept in `memory.json` under `parkour`, so he gets better at your jumps over time.

@@ -64,12 +64,47 @@ class Chests:
         chests.sort(key=lambda p: math.dist(p, centre))
         return chests[0]
 
+    def stand_spots(self, pos):
+        """Places to stand and open the chest from: solid floor, room for a body, and the
+        chest in sight and in reach from there. Nearest first. (Walking 'near' it isn't
+        enough: near can be the far side of the wall it's behind.)"""
+        x, y, z = pos
+        snap = sight.Snapshot.read(self.ctx.senses, pos, rh=4, rv=3)
+        here = self.ctx.eye_and_view()[3]
+        out = []
+        for dx in range(-3, 4):
+            for dz in range(-3, 4):
+                for dy in (-1, 0, 1):
+                    c = (x + dx, y + dy, z + dz)
+                    if (dx, dz) == (0, 0):
+                        continue
+                    if not sight.blocks_body(snap.name((c[0], c[1] - 1, c[2]))):
+                        continue
+                    if sight.blocks_body(snap.name(c)) or sight.blocks_body(snap.name((c[0], c[1] + 1, c[2]))):
+                        continue
+                    eye = (c[0] + 0.5, c[1] + 1.62, c[2] + 0.5)
+                    if math.dist(eye, (x + 0.5, y + 0.5, z + 0.5)) > 4.2 or not snap.block_visible(eye, pos, 5.0):
+                        continue
+                    out.append(c)
+        out.sort(key=lambda c: math.dist(c, here))
+        return out
+
     def open(self, pos):
-        """Walk up to the chest, check it's really in sight, and open it."""
+        """Walk to a spot the chest can be opened from (around through the door if it's in
+        a room), check it's really in sight, and open it."""
         ctx = self.ctx
         x, y, z = pos
-        if math.dist(ctx.eye_and_view()[3], (x + 0.5, y + 0.5, z + 0.5)) > 3.5:
-            ctx.body.call(f"goto {x + 0.5:.1f} {y:.1f} {z + 0.5:.1f} --near 2.5 --timeout 20")
+        eye = ctx.eye_and_view()[0]
+        snap = sight.Snapshot.read(ctx.senses, pos, rh=4, rv=3)
+        if math.dist(eye, (x + 0.5, y + 0.5, z + 0.5)) > 4.2 or not snap.block_visible(eye, pos, 5.0):
+            for c in self.stand_spots(pos)[:5]:
+                if self.task.done():
+                    return False
+                ctx.body.call(f"goto {c[0] + 0.5:.2f} {c[1]:.2f} {c[2] + 0.5:.2f} --near 0.6 --timeout 25")
+                eye = ctx.eye_and_view()[0]
+                snap = sight.Snapshot.read(ctx.senses, pos, rh=4, rv=3)
+                if math.dist(eye, (x + 0.5, y + 0.5, z + 0.5)) <= 4.5 and snap.block_visible(eye, pos, 5.0):
+                    break
         eye = ctx.eye_and_view()[0]
         snap = sight.Snapshot.read(ctx.senses, pos, rh=4, rv=3)
         if not snap.block_visible(eye, pos, 5.0):

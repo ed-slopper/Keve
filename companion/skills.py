@@ -219,6 +219,33 @@ class Ctx:
             self.body.call(f"click-slot {s['slot']}")
             self.body.call("close")  # a stack held on the cursor is thrown when it closes
 
+    # --- ground where breaking doesn't stick (spawn protection, a claim) --------------
+    def block_came_back(self, p, ok):
+        """Broken, but the server put it back a moment later. Checked on the first few
+        breaks and every tenth after (it costs a quarter of a second)."""
+        self._break_checks = getattr(self, "_break_checks", 0) + 1
+        if self._break_checks > 3 and self._break_checks % 10:
+            return False
+        time.sleep(0.25)
+        r = self.senses.call(f"blocks {p[0]} {p[1]} {p[2]} {p[0]} {p[1]} {p[2]}").get("blocks", [])
+        return bool(r) and ok(r[0][3])
+
+    def no_break_here(self, p):
+        """Remember a no-break zone round `p` (spawn protection is a square of up to 16
+        blocks each way) and walk out of it."""
+        zones = getattr(self, "zones", [])
+        if not any(math.dist(z, p) < 20 for z in zones):
+            zones.append(tuple(p))
+            self.zones = zones
+            self.say("the world won't let me break blocks here (spawn protection?). I'll go further out.")
+        pos = self.eye_and_view()[3]
+        dx, dz = pos[0] - p[0], pos[2] - p[2]
+        d = math.hypot(dx, dz) or 1.0
+        self.body.call(f"goto {p[0] + dx / d * 24:.1f} {pos[1]:.1f} {p[2] + dz / d * 24:.1f} --near 4 --timeout 20")
+
+    def protected(self, p):
+        return any(abs(p[0] - z[0]) <= 18 and abs(p[2] - z[2]) <= 18 for z in getattr(self, "zones", []))
+
     def quest_items(self):
         """Item ids Keve carries that belong to the job: what it's gathering or mining,
         and what it made for the latest order."""
@@ -639,6 +666,7 @@ class Follow(Task):
                 time.sleep(0.25)
             else:
                 sprint = speed > 5.0 or d > self.SPRINT_GAP
+                self._your_speed = speed
                 if not self.walk_trail(trail, pos, sprint):
                     # The trail didn't help: find a way there.
                     r = ctx.walk_to(op, near=3, timeout=4, task=self)
@@ -719,29 +747,86 @@ class Follow(Task):
             prev = pt
         return None
 
+    # --- jumps: learned per kind of jump (gap length, height), kept in memory.json -------
+    @staticmethod
+    def jump_kind(take_off, land):
+        span = math.hypot(land[0] - take_off[0], land[2] - take_off[2])
+        return f"{round(span * 2) / 2:.1f}/{round(land[1] - take_off[1]):+d}"
+
+    def technique(self, kind):
+        """How to do this kind of jump: a run-up (blocks), sprinting time before the jump
+        (s), and how long to hold forward in the air. Starts from what the physics needs
+        (a bigger gap or a climb needs a run-up), then whatever has worked best."""
+        import life
+        book = life.load_memory().get("parkour", {})
+        t = book.get(kind)
+        if t:
+            return t
+        span, dy = float(kind.split("/")[0]), int(kind.split("/")[1])
+        run = 0.4 if span <= 1.5 and dy <= 0 else 1.2 if span <= 2.5 else 2.2
+        return {"run": run, "lead": round(run / 4.0, 2), "air": 0.75, "tries": 0, "wins": 0, "seen": 0}
+
+    def learn_jump(self, kind, t, made, short_by=0.0):
+        """After a go: keep what works; on a miss, change the run-up or the timing."""
+        import life
+        t = dict(t)
+        t["tries"] = t.get("tries", 0) + 1
+        if made:
+            t["wins"] = t.get("wins", 0) + 1
+        elif short_by > 0.3:
+            t["run"] = min(3.0, round(t["run"] + 0.4, 2))   # fell short: more speed
+            t["lead"] = round(t["run"] / 4.0, 2)
+        else:
+            t["lead"] = round(max(0.05, t["lead"] - 0.06), 2)  # went off the edge first: jump earlier
+            t["air"] = min(1.2, round(t["air"] + 0.1, 2))
+        mem = life.load_memory()
+        mem.setdefault("parkour", {})[kind] = t
+        life.save_memory(mem)
+
+    def saw_you_jump(self, take_off, land, speed):
+        """You made this jump: note it (a kind you can do is one worth practising)."""
+        import life
+        kind = self.jump_kind(take_off, land)
+        t = self.technique(kind)
+        t["seen"] = t.get("seen", 0) + 1
+        if speed > 5.0 and t["run"] < 1.2:
+            t["run"], t["lead"] = 1.2, 0.3  # you sprinted into it: so will he
+        mem = life.load_memory()
+        mem.setdefault("parkour", {})[kind] = t
+        life.save_memory(mem)
+
     def parkour(self, take_off, land, sprint=True):
-        """Jump from where you took off to where you landed: back up for a run-up, sprint
-        to the edge, jump, and check he made it (a second go if not)."""
+        """Jump from where you took off to where you landed, the way that's worked for this
+        kind of jump: back up for a run-up, sprint to the edge, jump, check he made it.
+        Two goes, learning from each."""
         ctx = self.ctx
         dx, dz = land[0] - take_off[0], land[2] - take_off[2]
         span = math.hypot(dx, dz) or 1.0
         ux, uz = dx / span, dz / span
+        kind = self.jump_kind(take_off, land)
+        key = (round(take_off[0], 1), round(take_off[2], 1), round(land[0], 1), round(land[2], 1))
+        if key not in getattr(self, "_seen_jumps", set()):
+            self._seen_jumps = getattr(self, "_seen_jumps", set()) | {key}
+            self.saw_you_jump(take_off, land, getattr(self, "_your_speed", 0.0))
         for attempt in range(2):
             if self.done():
                 return True
+            t = self.technique(kind)
             ctx.body.call(f"goto {take_off[0]:.2f} {take_off[1]:.2f} {take_off[2]:.2f} --near 0.5 --timeout 3")
-            run = 1.4 if span > 1.6 or land[1] > take_off[1] + 0.4 else 0.6
-            back = (take_off[0] - ux * run, take_off[1], take_off[2] - uz * run)
+            back = (take_off[0] - ux * t["run"], take_off[1], take_off[2] - uz * t["run"])
             ctx.body.call(f"goto {back[0]:.2f} {back[1]:.2f} {back[2]:.2f} --near 0.3 --timeout 1.5 --direct")
             here = ctx.eye_and_view()[3]
             ctx.body.call(f"look-at {land[0]:.2f} {here[1] + 1.6:.2f} {land[2]:.2f}")
-            lead = math.dist((here[0], here[2]), (take_off[0], take_off[2]))
-            if lead > 0.2:
-                ctx.body.call(f"move forward {max(0.1, lead / 5.6 - 0.03):.2f} --sprint")
-            ctx.body.call("move forward 0.75 --sprint --jump")
+            if math.dist((here[0], here[2]), (take_off[0], take_off[2])) > 0.2:
+                ctx.body.call(f"move forward {t['lead']:.2f} --sprint")
+            ctx.body.call(f"move forward {t['air']:.2f} --sprint --jump")
             ctx.body.call(f"goto {land[0]:.2f} {land[1]:.2f} {land[2]:.2f} --near 0.6 --timeout 1.2 --direct --sprint")
             after = ctx.eye_and_view()[3]
-            if math.dist((after[0], after[2]), (land[0], land[2])) < 1.3 and after[1] >= land[1] - 0.4:
+            made = math.dist((after[0], after[2]), (land[0], land[2])) < 1.3 and after[1] >= land[1] - 0.4
+            # Short: he ended up back before the landing. Long/off the side: past or beside it.
+            along = (after[0] - take_off[0]) * ux + (after[2] - take_off[2]) * uz
+            self.learn_jump(kind, t, made, short_by=max(0.0, span - along))
+            if made:
                 return True
             if after[1] < take_off[1] - 1.5:
                 return False  # fell off: find another way up
@@ -854,7 +939,7 @@ class Gather(Task):
             # The nearest remembered target that hasn't failed too often.
             _, _, _, pos = ctx.eye_and_view()
             targets = [p for p, (n, _) in ctx.memory.items()
-                       if block_ok(n) and ctx.bad_targets.get(p, 0) < 2]
+                       if block_ok(n) and ctx.bad_targets.get(p, 0) < 2 and not ctx.protected(p)]
             if what == "wood" and targets:
                 targets = self.easy_trunks(targets, block_ok, pos)
             if not targets:
@@ -886,9 +971,13 @@ class Gather(Task):
             if what == "wood":
                 # Like a player: knock out the bottom of the trunk, step into its spot, and
                 # chop straight up. The logs drop on Keve's head instead of rolling off.
+                self.reverted = False
                 n = self.fell_tree(t, block_ok)
                 if self.done():
                     return
+                if self.reverted:
+                    ctx.no_break_here(t)
+                    continue
                 if n == 0:
                     ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
                     continue
@@ -993,6 +1082,9 @@ class Gather(Task):
             ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
             r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 15")
             if r.get("error"):
+                return False
+            if ctx.block_came_back(p, block_ok):
+                self.reverted = True  # the server put it back: protected ground
                 return False
             ctx.memory.pop(p, None)
             ctx.recent_breaks.append((p[0], p[1], p[2], time.time()))

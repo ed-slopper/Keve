@@ -153,6 +153,9 @@ class BreakBlocks(Task):
             r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 20")
             err = r.get("error")
             if not err:
+                if ctx.block_came_back(p, lambda n: base(n) in set(self.args["ids"])):
+                    ctx.no_break_here(p)  # broken, then put back: protected ground
+                    return False
                 return True
             m = re.search(r"(minecraft:[a-z_]+) at \[(-?\d+), (-?\d+), (-?\d+)\] is in the way", err)
             if not m or not any(k in m.group(1) for k in self.SOFT):
@@ -176,7 +179,7 @@ def in_reach(ctx, ids, skip=()):
         under.add((math.floor(o[1][0]), math.floor(o[1][1]) - 1, math.floor(o[1][2])))
     out = []
     for p, n in snap.blocks.items():
-        if base(n) not in ids or p in skip or p in under:
+        if base(n) not in ids or p in skip or p in under or ctx.protected(p):
             continue
         if math.dist(eye, (p[0] + .5, p[1] + .5, p[2] + .5)) > 4.4:
             continue

@@ -35,7 +35,7 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
                                            blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest,
-                                           life.Ride, life.GetOut, life.Recover)})
+                                           life.Ride, life.GetOut, life.Recover, life.Sleep)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
                "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 

@@ -29,7 +29,7 @@ keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some
 keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks | keve dig me out |
 keve place torches in this room | keve what do you see | keve what you got | keve help
 keve this is home | keve go home | keve remember this as the mine | keve go to the mine
-keve get in the boat with me | keve get out of the boat | keve play with me | keve watch me <do something> | keve did you see | keve copy what i did"""
+keve sleep in the bed | keve get in the boat with me | keve get out of the boat | keve play with me | keve watch me <do something> | keve did you see | keve copy what i did"""
 
 PROMPT = """You translate what a Minecraft player says to their AI companion Keve into Keve's commands.
 

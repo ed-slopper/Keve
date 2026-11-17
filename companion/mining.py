@@ -431,7 +431,12 @@ class Mine(Task):
         self.start_have = self.have()
         self.goal = want
         # 1. Tools: at least a stone pickaxe (iron comes from the mine itself).
-        if not self.prov.ensure_pickaxe(min(tier, 1)):
+        try:
+            have_pick = self.prov.ensure_pickaxe(min(tier, 1))
+        except RuntimeError as e:
+            ctx.say(f"couldn't make a pickaxe: {e}")
+            return
+        if not have_pick:
             if not self.done():
                 ctx.say("I couldn't make a pickaxe.")
             return

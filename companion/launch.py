@@ -220,6 +220,27 @@ def set_toml_port(port):
     (SERVER_DIR / "server.toml").write_text(t, encoding="utf-8")
 
 
+def no_spawn_protection():
+    """Spawn protection stops everyone but operators from breaking blocks near spawn, Keve
+    included (he 'mined 6 but picked up 0 wood' there). Keve's server is yours alone: off.
+    True when the setting changed (it takes effect when the server next starts)."""
+    import re
+    f = SERVER_DIR / "server.toml"
+    if not f.exists():
+        return False
+    t = f.read_text(encoding="utf-8")
+    if re.search(r"(?m)^spawn-protection\s*=\s*0\s*$", t):
+        return False
+    nl = chr(10)
+    t = re.sub(r"(?m)^spawn-protection\s*=.*$" + nl + "?", "", t)
+    if "[properties]" in t:
+        t = t.replace("[properties]", "[properties]" + nl + "spawn-protection = 0", 1)
+    else:
+        t += nl + "[properties]" + nl + "spawn-protection = 0" + nl
+    f.write_text(t, encoding="utf-8")
+    return True
+
+
 def stop_server(srv, port):
     subprocess.run([str(srv), "--dir", str(SERVER_DIR), "stop"], creationflags=NO_WINDOW)
     end = time.time() + 60
@@ -572,6 +593,8 @@ def main():
         if not port_open(server_port):
             stop_proxy()
     configure_forwarding(srv, args.port, skin)
+    if no_spawn_protection() and (port_open(server_port)):
+        print("Spawn protection is now off for Keve (he can build at spawn) from the next server start.")
 
     server_proc = ensure_server(srv, server_port, skin)
     if skin:

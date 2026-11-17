@@ -170,6 +170,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "sleep": "Sleep in a bed",
         "ride": "Get in the boat or minecart with the player",
         "new_chest": "Make a new chest, put it down here, and store things in it",
         "rescue": "Dig the player out when they are stuck or trapped",
@@ -356,7 +357,12 @@ RIDE = re.compile(r"\b(get|hop|climb|jump|sit)( back)? (in|into|on|onto)( to)? (
 GET_OUT = re.compile(r"\b(get|hop|climb|jump) (out|off)\b|\bdismount\b|\bleave the boat\b")
 
 
+SLEEP = re.compile(r"\b(sleep|go to (bed|sleep)|get in (the |this |that |a )?bed|lie down|take a nap|nap)\b")
+
+
 def reflex_route(text):
+    if SLEEP.search(text):
+        return "sleep", {}
     if RIDE.search(text):
         return "ride", {}
     if GET_OUT.search(text) and not re.search(r"\bget (me )?out of (here|the wall|this)\b|\bget me out\b", text):

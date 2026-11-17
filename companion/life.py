@@ -367,3 +367,45 @@ class Recover(Task):
             t = skills.SKILLS[skill](ctx, **args)
             t.cancelled = self.cancelled
             t.run()
+
+
+class Sleep(Task):
+    """'keve sleep in this bed' / 'go to bed': the bed by you that Keve can see, walked to
+    and right-clicked, like a player. Only works at night (or in a thunderstorm)."""
+    name = "sleep"
+
+    def run(self):
+        ctx = self.ctx
+        import blocks
+        import containers
+        import world_names
+        names = world_names.names()
+        beds = set(names.tag("beds")) if names else set()
+        if not beds:
+            ctx.say("I don't know what a bed looks like!")
+            return
+        p = blocks.find_target(ctx, self, beds, near_owner=True)
+        if p is None:
+            ctx.say("I don't see a bed. put one down and I'll hop in!")
+            return
+        try:
+            t = ctx.body.call("status").get("day_time", 0) % 24000
+        except Exception:
+            t = 18000
+        if 0 <= t < 12542:
+            ctx.say("it's daytime, I can only sleep at night! (or in a thunderstorm)")
+            return
+        ch = containers.Chests(ctx, self)
+        if not ch.open(p):  # walks to a spot it can reach the bed from, and right-clicks it
+            ctx.say("I can't get to that bed.")
+            return
+        ctx.say("goodnight, buddy! zzz...")
+        while not self.done():
+            time.sleep(1.0)
+            try:
+                t = ctx.body.call("status").get("day_time", 0) % 24000
+            except Exception:
+                break
+            if t < 12542:
+                ctx.say("good morning!")
+                break

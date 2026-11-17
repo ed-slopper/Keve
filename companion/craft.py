@@ -245,13 +245,26 @@ class Crafter:
                 raise NeedMore(kind, 1)
             self.craft(kind, 1)
         last = "no room"
-        for spot in self.free_spots():
-            r = self.ctx.place(spot, kind)
-            if not r.get("error"):
-                if kind == "crafting_table":
-                    self.ctx.placed_stations.append(tuple(spot))
-                return spot
-            last = r["error"]
+        for attempt in range(4):
+            for spot in self.free_spots():
+                r = self.ctx.place(spot, kind)
+                if not r.get("error"):
+                    if kind == "crafting_table":
+                        self.ctx.placed_stations.append(tuple(spot))
+                    return spot
+                last = r["error"]
+            if self.task.done():
+                break
+            # Boxed in (inside a tree trunk's gap, a 1-wide tunnel): a few steps to open
+            # ground, toward you first, then try again.
+            pos = self.ctx.eye_and_view()[3]
+            o = self.ctx.owner() if attempt == 0 else None
+            if o and math.dist(o[1], pos) > 2:
+                tx, tz = o[1][0], o[1][2]
+            else:
+                ang = attempt * 2.1
+                tx, tz = pos[0] + 4 * math.cos(ang), pos[2] + 4 * math.sin(ang)
+            self.ctx.body.call(f"goto {tx:.1f} {pos[1]:.1f} {tz:.1f} --near 2 --timeout 6")
         raise RuntimeError(f"couldn't put a {kind.replace('_', ' ')} down ({last})")
 
     def pick_up_station(self, pos):
