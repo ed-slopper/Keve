@@ -24,7 +24,7 @@ keve mine this coal | keve break that glass | keve dig this dirt | keve chop tha
 keve open that door | keve pull the lever | keve press the button
 keve place a crafting table | keve place a furnace | keve plant a sapling | keve plant 3 oak saplings | keve plant the seeds
 keve make a stone pickaxe | keve make an iron sword | keve craft 16 torches | keve make a furnace | keve make a crafting table
-keve craft torches from the chest | keve get the coal from the chest | keve put your stuff in the chest
+keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest
 keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some leather | keve defend me
 keve place torches in this room | keve what do you see | keve what you got | keve help
 keve this is home | keve go home | keve remember this as the mine | keve go to the mine
@@ -43,6 +43,9 @@ Rules:
 - If it isn't an order to Keve (chatting, joking, questions about Keve, talking to someone else), commands is [] and chat is true.
 - Teasing, insults, compliments, jokes, greetings and questions like "how are you" are chat, not commands.
 - Never repeat a task: one command per thing to do. "and bring it/them to me" stays on the same command.
+- Making/crafting something "from the chest" / "with the stuff in the chest" is ONE command: "keve make <item> from the chest". Never split it into a make and a chest command.
+- Misspelled item names mean that item: "picaxe"/"pickax"/"pic" = pickaxe, "cobble" = cobblestone.
+- Never output placeholders like [item] or <item>. If you don't know the item, use the closest real one or leave it out.
 - addressed: is the player talking to Keve (true) or to someone else / themselves (false)?
 
 Examples:
@@ -50,6 +53,8 @@ Examples:
 "yo chuck me some logs" -> {{"addressed": true, "commands": ["keve get 10 wood and bring it to me"], "chat": false}}
 "go find me diamonds then bring them back" -> {{"addressed": true, "commands": ["keve mine for diamonds and bring them to me"], "chat": false}}
 "grab wood, make a table, then come find me" -> {{"addressed": true, "commands": ["keve get 10 wood", "keve make a crafting table", "keve come here"], "chat": false}}
+"keve craft me a stone picaxe from the material in the chest" -> {{"addressed": true, "commands": ["keve make a stone pickaxe from the chest"], "chat": false}}
+"check the chest, it has what you need to make the pickaxe" -> {{"addressed": true, "commands": ["keve make a stone pickaxe from the chest"], "chat": false}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}
 "brb gotta get food" -> {{"addressed": false, "commands": [], "chat": true}}
 
@@ -96,7 +101,7 @@ class Translator:
         cmds = []
         for c in out.get("commands") or []:
             c = re.sub(r"\s+", " ", str(c).lower().strip(" .!?"))
-            if not c:
+            if not c or re.search(r"[\[<{]", c):  # a placeholder like "[item]" is no order
                 continue
             if not c.startswith("keve"):
                 c = "keve " + c

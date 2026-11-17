@@ -159,15 +159,19 @@ class PutInChest(Task):
         ctx.say(f"put {moved} items in the chest." if moved else "I had nothing to put in there.")
 
 
-def take_for_recipe(ctx, task, item):
-    """Before crafting `item` 'from the chest': take everything its recipe tree can use."""
+def take_for_recipe(ctx, task, item, quiet=False):
+    """Before crafting `item` 'from the chest': take everything its recipe tree can use.
+    quiet: a look on Keve's own initiative (missing materials), silent when there's no chest."""
     wanted = recipe_ingredients(item)
     tests = [craft.INGREDIENTS[w] for w in wanted if w in craft.INGREDIENTS]
     ch = Chests(ctx, task)
-    pos = ch.find()
+    pos = ch.find() or ch.find(near_owner=False)
     if pos is None:
-        ctx.say("I don't see a chest near you, I'll find the stuff myself.")
+        if not quiet:
+            ctx.say("I don't see a chest near you, I'll find the stuff myself.")
         return False
+    if quiet:
+        ctx.say("hold up, checking that chest for materials first!")
     if not ch.open(pos):
         ctx.say("I can't get to that chest.")
         return False
@@ -175,5 +179,6 @@ def take_for_recipe(ctx, task, item):
         got = ch.take(lambda i: any(t(i) for t in tests))
     finally:
         ch.close()
-    ctx.say(f"grabbed {got} things from the chest." if got else "nothing in that chest I can use.")
+    if got or not quiet:
+        ctx.say(f"grabbed {got} things from the chest." if got else "nothing in that chest I can use.")
     return got > 0

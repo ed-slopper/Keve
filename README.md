@@ -27,7 +27,7 @@ You type in chat, "keve get 10 wood", "keve mine for diamonds", "keve follow me"
 
 Then type **`keve help`** in chat. All the orders are in [COMMANDS.md](COMMANDS.md).
 
-Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--no-voice`, `--setup-voice`, `--profile NAME`, `--owner NAME`, `--port N`.
+Options: `Keve.bat --no-game` (your Horizon is already open), `--no-llm` (no Ollama), `--no-voice`, `--mic` (listen on the microphone; off by default, so you type and Keve talks), `--setup-voice`, `--profile NAME`, `--owner NAME`, `--port N`.
 
 ## When Keve does something odd: the session log
 

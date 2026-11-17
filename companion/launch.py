@@ -504,6 +504,8 @@ def main():
     p.add_argument("--no-llm", action="store_true", help="no Ollama: plain orders only")
     p.add_argument("--profile", help="use this GPU profile from profiles.json (cpu, 4gb ... 128gb)")
     p.add_argument("--no-voice", action="store_true", help="no talking or listening")
+    p.add_argument("--mic", action="store_true",
+                   help="also listen on the microphone (off by default: type in chat, Keve still talks)")
     p.add_argument("--no-translate", action="store_true",
                    help="don't run your words through the chat model first (Kev and the rules only)")
     p.add_argument("--no-skin", action="store_true", help="Keve keeps the default skin (no skin proxy)")
@@ -536,7 +538,9 @@ def main():
     if args.setup_voice:
         setup_voice(profile)
     ears, mouth = ("off", "off") if args.no_voice else voice_ready(profile)
-    if not args.no_voice and (ears, mouth) != (profile["ears"], profile["mouth"]):
+    if not args.mic:
+        ears = "off"  # typing only; Keve still speaks. Keve.bat --mic turns listening on.
+    if not args.no_voice and (ears, mouth) != (profile["ears"] if args.mic else "off", profile["mouth"]):
         print(f"Voice: using Windows speech for now ({ears} ears, {mouth} voice). "
               f"For the better voice this profile can run, use Keve.bat --setup-voice once.")
 
@@ -576,7 +580,8 @@ def main():
                                ears=ears, mouth=mouth, no_translate=args.no_translate, whisper=profile.get("whisper") or "small.en",
                                whisper_device=profile.get("whisper_device", "cpu"))
     if ears != "off" or mouth != "off":
-        print(f"Voice: {ears} ears, {mouth} voice. Say 'Keve, follow me'.")
+        print(f"Voice: {ears} ears, {mouth} voice. " + ("Say 'Keve, follow me'." if ears != "off" else
+              "Mic is off: type to Keve in chat (Keve.bat --mic to talk to him)."))
     try:
         keve.Keve(kargs).run()
     except KeyboardInterrupt:

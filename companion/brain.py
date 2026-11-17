@@ -304,7 +304,7 @@ def find_craftable(text):
             mat = m
             break
     for tool in ("pickaxe", "sword", "axe", "shovel"):
-        if re.search(rf"\b{tool}s?\b", t) or (tool == "pickaxe" and re.search(r"\bpicks?\b", t)):
+        if re.search(rf"\b{tool}s?\b", t) or (tool == "pickaxe" and re.search(r"\bpicks?\b|\bpi[ck]{1,2}ax(e|es)?\b|\bpick ax(e|es)?\b", t)):
             return f"{mat or 'stone'}_{tool}"
     for word, item in (("torch", "torch"), ("crafting table", "crafting_table"),
                        ("workbench", "crafting_table"), ("table", "crafting_table"),
@@ -359,8 +359,19 @@ def route_plant(text):
     return "plant", {"item": item, "count": n or 1}
 
 
+TYPOS = [(re.compile(r"\bpi[ck]{1,2}ax(e)?s?\b|\bpick ax(e)?s?\b"), "pickaxe")]
+
+
+def fix_typos(text):
+    """'picaxe' -> 'pickaxe': common misspellings of item names."""
+    for pat, word in TYPOS:
+        text = pat.sub(word, text)
+    return text
+
+
 def route_give_item(text):
     """'give me a stone pickaxe' / 'bring me a furnace': that item, got first if needed."""
+    text = fix_typos(text)
     if not re.search(r"\b(give|bring|hand|toss)\b", text):
         return None
     if re.search(r"\b(everything|all)\b", text):
@@ -371,7 +382,11 @@ def route_give_item(text):
         return None
     item, label = names.item_in(text)
     if not item:
-        return None
+        # "give me a pickaxe" (no material named): the tool Keve would make, stone by default.
+        tool = find_craftable(text)
+        if not (tool and re.search(r"_(pickaxe|sword|axe|shovel)$", tool)):
+            return None
+        item, label = "minecraft:" + tool, tool.replace("_", " ")
     # A plain gather word ("wood", "sand") or an ore: those routes know them. A longer
     # name ("stone pickaxe", "crafting table") is a particular item.
     if len(label.split()) < 2 and (find_item(text) or find_ore(text)):

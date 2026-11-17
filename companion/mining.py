@@ -49,6 +49,8 @@ class Provision:
         self.ctx = ctx
         self.task = task
         self.crafter = craft.Crafter(ctx, task)
+        self.goal = None           # the item asked for, so a nearby chest is checked for its recipe
+        self.chest_checked = False
 
     def pick_tier(self):
         counts = self.ctx.counts()
@@ -65,6 +67,8 @@ class Provision:
         """Have at least `count` of a craftable item. False when it can't be done here."""
         if depth > 6 or self.task.done():
             return False
+        if depth == 0 and self.goal is None:
+            self.goal = item
         for _ in range(8):
             if self.task.done():
                 return False
@@ -83,6 +87,12 @@ class Provision:
         if getattr(self, "only_inventory", False):
             self.missing = (what, n)
             return False
+        if not self.chest_checked and self.goal:
+            # Like a player: look in the chest right here before walking off for materials.
+            self.chest_checked = True
+            import containers
+            if containers.take_for_recipe(ctx, self.task, self.goal, quiet=True):
+                return True
         if what == "log":
             ctx.say(f"need wood first, getting {n + 1} logs")
             self.sub(Gather, item="wood", count=n + 1)
