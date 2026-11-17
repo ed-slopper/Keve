@@ -26,7 +26,7 @@ keve place a crafting table | keve place a furnace | keve plant a sapling | keve
 keve make a stone pickaxe | keve make an iron sword | keve craft 16 torches | keve make a furnace | keve make a crafting table
 keve craft torches from the chest | keve make a stone pickaxe from the chest | keve get the coal from the chest | keve put your stuff in the chest
 keve kill this cow | keve kill 3 pigs | keve kill the zombies | keve get me some leather | keve defend me
-keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks |
+keve dig out this room bigger | keve dig out this room 3 more | keve replace the floor with cobblestone | keve replace the floor with oak planks | keve replace the wall with cobblestone | keve replace the walls with stone bricks |
 keve place torches in this room | keve what do you see | keve what you got | keve help
 keve this is home | keve go home | keve remember this as the mine | keve go to the mine
 keve play with me | keve watch me <do something> | keve did you see | keve copy what i did"""
@@ -47,6 +47,7 @@ Rules:
 - Making/crafting something "from the chest" / "with the stuff in the chest" is ONE command: "keve make <item> from the chest". Never split it into a make and a chest command.
 - Misspelled item names mean that item: "picaxe"/"pickax"/"pic" = pickaxe, "cobble" = cobblestone.
 - Making a room/space bigger, digging or mining it out "here" is "keve dig out this room bigger", NOT mining for ores or diamonds.
+- "faster", "hurry", "come on", "good job" are chat, never a new command.
 - "ok", "okay", "nice", "thanks", "cool" on their own are chat, never "come here".
 - Never output placeholders like [item] or <item>. If you don't know the item, use the closest real one or leave it out.
 - addressed: is the player talking to Keve (true) or to someone else / themselves (false)?
@@ -61,6 +62,9 @@ Examples:
 "can u mine out a bigger room in here" -> {{"addressed": true, "commands": ["keve dig out this room bigger"], "chat": false}}
 "help me dig this room out, at my y level not down" -> {{"addressed": true, "commands": ["keve dig out this room bigger"], "chat": false}}
 "keve replace the floor with cobble its in the chest" -> {{"addressed": true, "commands": ["keve replace the floor with cobblestone"], "chat": false}}
+"keve replace the wall im standing in front of with cobble" -> {{"addressed": true, "commands": ["keve replace the wall with cobblestone"], "chat": false}}
+"keve redo all the walls in here with cobble" -> {{"addressed": true, "commands": ["keve replace the walls with cobblestone"], "chat": false}}
+"faster keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "ok keve" -> {{"addressed": true, "commands": [], "chat": true}}
 "haha keve you're so dumb" -> {{"addressed": true, "commands": [], "chat": true}}
 "brb gotta get food" -> {{"addressed": false, "commands": [], "chat": true}}

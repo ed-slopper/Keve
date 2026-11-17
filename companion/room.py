@@ -167,58 +167,83 @@ class DigRoom(Task):
         return False
 
 
-class ReplaceFloor(Task):
-    """'keve replace the floor with cobblestone (it's in the chest)': every floor block of the
-    room you're in, swapped for that block. Takes it from a nearby chest if Keve is short."""
-    name = "floor"
+def floor_top(snap, x, y, z, depth=3):
+    """The level of the solid block under the open air at (x, y, z): the real floor."""
+    for fy in range(y - 1, y - 1 - depth, -1):
+        if solid(snap.name((x, fy, z))):
+            return fy
+    return None
+
+
+def floor_level(snap, room, y):
+    """The room's floor level: the one most of its floor is at (ties go to the lower one,
+    so standing on a block or on cobble placed too high doesn't fool it)."""
+    levels = {}
+    for x, z in room:
+        top = floor_top(snap, x, y, z)
+        if top is not None:
+            levels[top] = levels.get(top, 0) + 1
+    if not levels:
+        return None
+    return max(levels, key=lambda lv: (levels[lv], -lv))
+
+
+class Resurface(Task):
+    """Swap the blocks of a room's floor or walls for another block: break each one, then
+    put the new one in the same spot. Takes more from a nearby chest if Keve is short."""
     MAX_CELLS = 160
+    what = "floor"
 
     def run(self):
         ctx = self.ctx
-        item = self.args.get("item") or "minecraft:cobblestone"
-        shown = item.removeprefix("minecraft:").replace("_", " ")
+        self.item = item = self.args.get("item") or "minecraft:cobblestone"
+        self.shown = shown = item.removeprefix("minecraft:").replace("_", " ")
         o = ctx.owner()
         centre = tuple(math.floor(v) for v in (o[1] if o else ctx.state()["player"]["position"]))
-        y = centre[1]
-        snap = sight.Snapshot.read(ctx.senses, centre, rh=14, rv=4)
-        room = measure(snap, centre, y, 2, 12)
+        self.centre = centre
+        snap = sight.Snapshot.read(ctx.senses, centre, rh=14, rv=6)
+        room = measure(snap, centre, centre[1], 2, 12)
         self.room = room
-        if not room:
-            ctx.say("I can't tell where the floor is. stand in the room and ask again!")
+        floor = floor_level(snap, room, centre[1]) if room else None
+        if floor is None:
+            ctx.say(f"I can't tell where the room is. stand inside it and ask again!")
             return
-        cells = [(x, y - 1, z) for x, z in room if base(snap.name((x, y - 1, z))) != item]
-        if len(room) >= MAX_FLOOR:
-            ctx.say("this place is huge, I'll do the floor around you.")
-        cells.sort(key=lambda c: math.dist(c, centre))
-        cells = cells[:self.MAX_CELLS]
-        if not cells:
-            ctx.say(f"the floor's already all {shown}!")
+        self.floor = floor
+        # Columns of the room whose open space is at this floor (not a pit or a step).
+        self.room = {(x, z) for x, z in room if floor_top(snap, x, centre[1], z) in (floor - 1, floor, floor + 1)}
+        jobs = self.jobs(snap)            # [(cell, stand_column, kind)] kind: swap / fill / clear
+        jobs.sort(key=lambda j: math.dist(j[0], centre))
+        jobs = jobs[:self.MAX_CELLS]
+        if not jobs:
+            ctx.say(f"the {self.what}'s already all {shown}!")
             return
+        need = sum(1 for j in jobs if j[2] != "clear")
         have = ctx.counts().get(item, 0)
-        if have < len(cells):
-            self.fetch(item, len(cells) - have)
+        if have < need:
+            self.fetch(item, need - have)
             have = ctx.counts().get(item, 0)
         if have <= 0:
             ctx.say(f"I don't have any {shown}, and there's none in a chest near you.")
             return
-        if have < len(cells):
-            ctx.say(f"I've only got {have} {shown} for {len(cells)} floor blocks, doing what I can.")
-            cells = cells[:have]
-        ctx.say(f"new floor coming up: {len(cells)} blocks of {shown}!")
+        if have < need:
+            ctx.say(f"I've only got {have} {shown} for {need} blocks, doing what I can.")
+        ctx.say(f"new {self.what} coming up: {min(have, need)} blocks of {shown}!")
         names = world_names.names()
         done = 0
-        for c in cells:
+        for cell, stand, kind in jobs:
             if self.done():
                 return
-            if self.swap(c, item, names):
-                done += 1
+            if kind != "clear" and ctx.counts().get(item, 0) <= 0:
+                break
+            if self.do(cell, stand, kind, names):
+                done += kind != "clear"
             if done and done % 10 == 0:
                 ctx.collect(5, self)
         ctx.collect(6, self)
         if self.done():
             return
-        ctx.say(f"floor's done! {done} blocks of {shown}. fancy!" if done else
-                "I couldn't swap any of the floor from here.")
+        ctx.say(f"{self.what}'s done! {done} blocks of {shown}. fancy!" if done else
+                f"I couldn't swap any of the {self.what} from here.")
         if getattr(self, "under_you", False):
             ctx.say("I skipped the block you're standing on. step off it and ask again to finish!")
 
@@ -236,35 +261,41 @@ class ReplaceFloor(Task):
             self.ctx.say(f"grabbed {got} {item.removeprefix('minecraft:').replace('_', ' ')} from the chest.")
         return got
 
-    def swap(self, c, item, names):
-        """Break one floor block and put the new one in its place. Keve never stands on it."""
+    def stand_near(self, cell, stand):
+        """Walk onto a room column next to the job (never onto the block being dug)."""
         ctx = self.ctx
-        x, y, z = c
+        x, _, z = cell
         me = ctx.state()["player"]["block_pos"]
-        if (me[0], me[2]) == (x, z) or math.dist((me[0], me[2]), (x, z)) > 3.5:
-            # Stand on a neighbouring floor block of the room, never the one being dug.
-            spots = [(x + dx, z + dz) for dx, dz in SIDES if (x + dx, z + dz) in self.room]
-            spots.sort(key=lambda p: math.dist(p, (me[0], me[2])))
-            for sx, sz in spots[:2]:
-                ctx.body.call(f"goto {sx + 0.5:.1f} {y + 1:.1f} {sz + 0.5:.1f} --near 0.6 --timeout 6")
-                me = ctx.state()["player"]["block_pos"]
-                if (me[0], me[2]) != (x, z) and math.dist((me[0], me[2]), (x, z)) <= 3.5:
-                    break
-            if (me[0], me[2]) == (x, z) or self.done():
-                return False
+        spots = [stand] if stand else [(x + dx, z + dz) for dx, dz in SIDES if (x + dx, z + dz) in self.room]
+        if (me[0], me[2]) != (x, z) and math.dist((me[0], me[2]), (x, z)) <= 3.2:
+            return True
+        spots.sort(key=lambda p: math.dist(p, (me[0], me[2])))
+        for sx, sz in spots[:2]:
+            ctx.body.call(f"goto {sx + 0.5:.1f} {self.floor + 1:.1f} {sz + 0.5:.1f} --near 0.6 --timeout 6")
+            me = ctx.state()["player"]["block_pos"]
+            if (me[0], me[2]) != (x, z) and math.dist((me[0], me[2]), (x, z)) <= 3.5:
+                return not self.done()
+        return False
+
+    def do(self, cell, stand, kind, names):
+        ctx = self.ctx
+        x, y, z = cell
         o = ctx.owner()
-        if o and (math.floor(o[1][0]), math.floor(o[1][2])) == (x, z):
+        if o and self.what == "floor" and (math.floor(o[1][0]), math.floor(o[1][2])) == (x, z):
             self.under_you = True
             return False  # you're standing on it
-        eye = tuple(ctx.state()["player"]["eye"])
-        snap = sight.Snapshot.read(ctx.senses, c, rh=3, rv=2)
-        name = snap.name(c)
-        if base(name) == item:
-            return True
-        if not snap.block_visible(eye, c, 5.0):
+        if not self.stand_near(cell, stand):
             return False
+        eye = tuple(ctx.state()["player"]["eye"])
+        snap = sight.Snapshot.read(ctx.senses, cell, rh=3, rv=3)
+        name = snap.name(cell)
+        if kind != "clear" and base(name) == self.item:
+            return True
         if solid(name):
-            if any(u in name for u in ("bedrock", "chest", "furnace", "crafting_table", "door", "bed")):
+            if not snap.block_visible(eye, cell, 5.0):
+                return False
+            if any(u in name for u in ("bedrock", "chest", "furnace", "crafting_table", "door", "bed",
+                                       "spawner", "portal", "torch", "lantern")):
                 return False
             tool = names.tool_for(name)[0] if names else "pickaxe"
             ctx.select_best(TOOLS.get(tool, PICKAXES))
@@ -273,5 +304,68 @@ class ReplaceFloor(Task):
             if r.get("error"):
                 return False
             ctx.recent_breaks.append((x, y, z, time.time()))
-        r = ctx.place(c, item)  # right away, so whatever was under it stays covered
+        if kind == "clear":
+            return True
+        r = ctx.place(cell, self.item)  # right away, so whatever was behind it stays covered
         return not r.get("error")
+
+
+class ReplaceFloor(Resurface):
+    """'keve replace the floor with cobblestone': the floor itself, not on top of it."""
+    name = "floor"
+    what = "floor"
+
+    def jobs(self, snap):
+        f, out = self.floor, []
+        for x, z in self.room:
+            top = floor_top(snap, x, self.centre[1], z)
+            if top == f + 1 and base(snap.name((x, f + 1, z))) == self.item:
+                out.append(((x, f + 1, z), None, "clear"))  # a block sitting on the floor: lift it
+            cell = (x, f, z)
+            name = snap.name(cell)
+            if solid(name):
+                if base(name) != self.item:
+                    out.append((cell, None, "swap"))
+            elif solid(snap.name((x, f - 1, z))):
+                out.append((cell, None, "fill"))  # a hole in the floor
+        # Lift the stray blocks before swapping what's under them.
+        out.sort(key=lambda j: j[2] != "clear")
+        return out
+
+
+class ReplaceWall(Resurface):
+    """'keve replace the wall with cobble' (the wall nearest you) / 'the walls' (all of them)."""
+    name = "wall"
+    what = "wall"
+
+    def jobs(self, snap):
+        f = self.floor
+        hs = [ceiling_height(snap, x, f + 1, z) for x, z in self.room]
+        height = max(2, min(4, max(set(hs), key=hs.count))) if hs else 3  # the usual ceiling
+        faces = {}  # (normal, plane) -> [(cell, stand column)]
+        for x, z in self.room:
+            for dx, dz in SIDES:
+                wx, wz = x + dx, z + dz
+                if (wx, wz) in self.room:
+                    continue
+                for h in range(height):
+                    cell = (wx, f + 1 + h, wz)
+                    name = snap.name(cell)
+                    if solid(name) and base(name) != self.item:
+                        plane = wx if dx else wz
+                        faces.setdefault(((dx, dz), plane), []).append((cell, (x, z)))
+        if not faces:
+            return []
+        if self.args.get("all"):
+            chosen = [j for js in faces.values() for j in js]
+        else:
+            # "the wall": the one nearest you (Keve can't tell where you're looking).
+            ox, _, oz = self.centre
+            key = min(faces, key=lambda k: min(math.dist((c[0], c[2]), (ox, oz)) for c, _ in faces[k]))
+            chosen = faces[key]
+        seen, out = set(), []
+        for cell, stand in chosen:
+            if cell not in seen:
+                seen.add(cell)
+                out.append((cell, stand, "swap"))
+        return out

@@ -33,9 +33,9 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            containers.TakeFromChest, containers.PutInChest,
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
-                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor)})
+                                           blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
-               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor")
+               "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall")
 
 CHAT_LINE = re.compile(r"^<([^>]+)> (.*)$")
 
@@ -134,6 +134,9 @@ class Keve:
         self.task = None
 
     def start_task(self, skill, args):
+        cur = getattr(self, "task", None)
+        if skill == "cant" and cur is not None and cur.name != "idle" and not cur.done():
+            return  # "faster keve": not an order Keve knows, so keep doing the job
         self.stop_task()
         if skill == "cant":
             skill, args = "idle", {}
@@ -210,7 +213,7 @@ class Keve:
             return None
         if len(out) == 1:
             return out[0]
-        words = {"dig_room": "dig out the room", "floor": "redo the floor","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
+        words = {"dig_room": "dig out the room", "floor": "redo the floor", "wall": "redo the wall","gather": "get {count} {item}", "mine": "mine {ore}", "craft": "make {item}",
                  "come": "come back", "follow": "follow you", "give": "bring it over",
                  "go_place": "go to {name}", "take": "check the chest", "put": "fill the chest",
                  "defend": "guard you", "plant": "plant it", "hunt": "hunt {mob}",

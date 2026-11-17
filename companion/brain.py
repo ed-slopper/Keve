@@ -169,6 +169,7 @@ class Kev:
         "mine": "Go mining underground for ores: diamonds, iron, coal, gold, redstone, lapis",
         "craft": "Craft or make an item: a pickaxe, sword, axe, torches, crafting table, furnace",
         "companion": "Play or explore alongside the player on its own, deciding what to do",
+        "wall": "Replace the wall or walls of the room with a block",
         "floor": "Replace or redo the floor of the room with a block",
         "dig_room": "Dig out or widen a room or space where the player is, on the same level",
         "light_up": "Place torches to light up a room, a cave or an area",
@@ -278,12 +279,16 @@ def route_room(text):
     return "dig_room", {"size": max(1, min(size, 6))}
 
 
-FLOOR = re.compile(r"\b(replace|redo|change|swap|cover|lay|put|pave|make|do|turn|switch)\b.*\bfloo?rs?\b|\bfloo?rs?\b.*\b(with|to|into|out of)\b")
+SURFACE = r"(floo?rs?|walls?)"
+FLOOR = re.compile(r"\b(replace|redo|change|swap|cover|lay|put|pave|make|do|turn|switch)\b.*\b" + SURFACE + r"\b"
+                   r"|\b" + SURFACE + r"\b.*\b(with|to|into|out of)\b")
 
 
 def route_floor(text):
-    """'replace the floor with cobblestone' / 'make the floor stone bricks': the room's floor."""
-    if not FLOOR.search(text) or re.search(r"\b(on|off|onto|from) (the |this |that |my |our )?floo?r\b|\b(torch|lantern|chest|bed|sapling)", text):
+    """'replace the floor with cobblestone' / 'make the floor stone bricks' / 'replace the wall
+    with cobble' / 'do all the walls in stone bricks': the room's floor or walls."""
+    if not FLOOR.search(text) or re.search(r"\b(on|off|onto|from|against|by) (the |this |that |my |our )?" + SURFACE + r"\b"
+                                            r"|\b(torch|lantern|chest|bed|sapling|painting|sign)", text):
         return None
     item = None
     import world_names
@@ -292,12 +297,18 @@ def route_floor(text):
     for part in ([m.group(2)] if m else []) + [text]:
         if names:
             found, _ = names.item_in(part)
-            if found and found not in ("minecraft:air",):
+            if found and found not in ("minecraft:air",) and not found.endswith("_wall"):
                 item = found
                 break
     if item is None and re.search(r"\bcobble", text):
         item = "minecraft:cobblestone"
-    return "floor", {"item": item or "minecraft:cobblestone"}
+    item = item or "minecraft:cobblestone"
+    fl = re.search(r"\bfloo?rs?\b", text)
+    wl = re.search(r"\bwalls?\b", text)
+    if wl and (not fl or wl.start() < fl.start()):
+        every = bool(re.search(r"\bwalls\b|\ball (the |of the )?wall\b|\bevery wall\b", text))
+        return "wall", {"item": item, "all": every}
+    return "floor", {"item": item}
 
 
 def reflex_route(text):
@@ -657,6 +668,7 @@ ACKS = {
     "light_up": ["on it, lighting it up", "torches coming up"],
     "dig_room": ["renovation time", "digging it out"],
     "floor": ["new floor, coming right up", "flooring time"],
+    "wall": ["new walls, coming right up", "wall makeover time"],
     "hunt": ["on it", "say goodbye to it", "it's dead meat"],
     "plant": ["planting!", "a tree is born!"],
     "break": ["on it", "breaking the {label}", "getting the {label}"],

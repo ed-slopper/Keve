@@ -120,7 +120,8 @@ No sapling on hand: Keve breaks nearby leaves until one drops, then plants it.
 | --- | --- |
 | `keve place torches in this room` / `keve light up this cave` / `keve put some torches down` | Lights up the room you're standing in |
 | `keve dig out this room bigger` / `keve mine out a bigger room in here` / `keve make this room wider by 4` | Widens the room you are standing in, on your level (2 blocks by default). It never digs the floor or ceiling, and it plugs lava it uncovers |
-| `keve replace the floor with cobblestone` / `keve make the floor oak planks` | Swaps every floor block of the room you are in for that block. If he is short, he takes more from a nearby chest. He skips the block you are standing on |
+| `keve replace the floor with cobblestone` / `keve make the floor oak planks` | Swaps the floor blocks of the room you are in for that block. It replaces the real floor, not on top of it, lifts stray blocks sitting on the floor, and fills holes. If he is short, he takes more from a nearby chest. He skips the block you are standing on |
+| `keve replace the wall with cobble` / `keve replace the walls with stone bricks` | "the wall" is the wall nearest you (Keve cannot tell where you are looking). "the walls" / "all the walls" does every wall, floor to ceiling |
 
 How it lights a room:
 - **What counts as the room:** the space you could walk to from where you stand, inside walls, within about 9 blocks.
