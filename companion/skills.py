@@ -675,6 +675,8 @@ class Gather(Task):
             _, _, _, pos = ctx.eye_and_view()
             targets = [p for p, (n, _) in ctx.memory.items()
                        if block_ok(n) and ctx.bad_targets.get(p, 0) < 2]
+            if what == "wood" and targets:
+                targets = self.easy_trunks(targets, block_ok, pos)
             if not targets:
                 if not ctx.look_around(block_ok):
                     if explores >= self.args.get("max_explores", 6):
@@ -749,12 +751,36 @@ class Gather(Task):
             ctx.maybe_eat()
 
 
+    def easy_trunks(self, logs, block_ok, pos):
+        """Only the easy logs: the foot of a trunk that stands on the ground. A log up in
+        the leaves (a branch, the top of a tall tree already chopped) means climbing the
+        tree, so it's skipped. Each trunk is aimed at its bottom log."""
+        snap = sight.Snapshot.read(self.ctx.senses, pos, rh=18, rv=10)
+        bases = set()
+        for x, y, z in logs:
+            b = y
+            while block_ok(snap.name((x, b - 1, z))) and b > y - 12:
+                b -= 1
+            ground = snap.name((x, b - 1, z))
+            if not sight.blocks_body(ground) or "leaves" in ground or b > pos[1] + 3:
+                continue
+            if self.ctx.bad_targets.get((x, b, z), 0) < 2:
+                bases.add((x, b, z))
+        return list(bases)
+
     def endless_check(self, what, shown, have, start):
         """Every 16 blocks of a nonstop job: say the count; full pockets go in the job's
         chest if there is one (then carry on), else stop. 'stop' when the job should end."""
         ctx = self.ctx
         inv = ctx.body.call("inventory")
         used = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
+        if self.args.get("new_chest") and not ctx.store_chest:
+            import containers
+            t = containers.NewChest(ctx, put=what)  # 'and put it in a new chest': once there's wood for one
+            t.cancelled = self.cancelled
+            t.run()
+            self._restart = have()
+            return "go"
         if len(used) >= 35 and ctx.store_chest:
             ctx.say(f"pockets full! dropping the {shown} off in the chest.")
             import containers

@@ -333,17 +333,20 @@ def route_gather_more(text):
         return None
     if ENDLESS.search(text):
         return "gather", {"item": item, "count": 100000, "endless": True,
-                          "max_seconds": 4 * 3600, "max_explores": 100000}
+                          "max_seconds": 4 * 3600, "max_explores": 100000,
+                          "new_chest": bool(re.search(r"\b(new|a|another) chest\b", text))}
     if re.search(r"\btrees\b", text) and not re.search(r"[0-9]|\b(a|one|this|that) tree\b", text):
         return "gather", {"item": "wood", "count": parse_count(text) or 16}
     return None
 
 
 def reflex_route(text):
+    more = route_gather_more(text)
+    if more and more[1].get("endless"):
+        return more  # "chop trees nonstop and put it in a new chest": the chest comes with the job
     fresh = route_new_chest(text)
     if fresh:
         return fresh
-    more = route_gather_more(text)
     if more:
         return more
     if RESCUE.search(text) and not re.search(r"\bhelp me\b", text) or re.search(r"\b(stuck|trapped|get( me)? out|dig me out|mine me out)\b", text):

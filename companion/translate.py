@@ -76,6 +76,7 @@ Examples:
 "give it to me" (Keve just made a stone pickaxe) -> {{"addressed": true, "commands": ["keve give me the stone pickaxe"], "chat": false}}
 "make me stone sword" -> {{"addressed": true, "commands": ["keve make a stone sword"], "chat": false}}
 "make all the stone tools and put them in the chest" -> {{"addressed": true, "commands": ["keve make a stone pickaxe", "keve make a stone axe", "keve make a stone shovel", "keve make a stone hoe", "keve make a stone sword", "keve put the stone tools in the chest"], "chat": false}}
+"keve chop down trees nonstop and put it in a new chest" -> {{"addressed": true, "commands": ["keve chop trees until i say stop and put them in a new chest"], "chat": false}}
 "keve mine trees until i say" -> {{"addressed": true, "commands": ["keve chop trees until i say stop"], "chat": false}}
 "give them to me" (Keve just made a stone sword, axe and hoe) -> {{"addressed": true, "commands": ["keve give me the stone sword", "keve give me the stone axe", "keve give me the stone hoe"], "chat": false}}
 "make a chest and store the wood in it" -> {{"addressed": true, "commands": ["keve make a chest and put the wood in it"], "chat": false}}
