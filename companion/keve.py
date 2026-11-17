@@ -207,8 +207,8 @@ class Keve:
             out.append((skill, args))
         # "follow me and help me dig this out": following never ends, so with a real job
         # alongside it, the job is what's meant (and Keve comes to you first anyway).
-        if len(out) > 1 and any(s not in ("follow", "stay") for s, _ in out):
-            out = [(s, a) for s, a in out if s not in ("follow", "stay")]
+        if len(out) > 1 and any(s not in ("follow", "stay", "stop") for s, _ in out):
+            out = [(s, a) for s, a in out if s not in ("follow", "stay", "stop")]
         if not out:
             return None
         if len(out) == 1:
