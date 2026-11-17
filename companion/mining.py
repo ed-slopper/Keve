@@ -261,6 +261,7 @@ class Craft(Task):
             self.ctx.say(f"couldn't make {shown}: {e}")
             return
         if ok:
+            self.ctx.last_item = "minecraft:" + item
             self.ctx.say(f"made {shown}!" if count == 1 else f"made {count} {shown}!")
             if self.args.get("give"):
                 Give(self.ctx, item=None, items=[item]).run_inner(self)

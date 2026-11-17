@@ -197,6 +197,7 @@ class Keve:
                 journal.log("route", f"no route for translated command: {cmd}")
                 continue
             skill, args = r
+            skill, args = self.keep_named_item(original, skill, args)
             if skill == "give" and args.get("item") and not args.get("items"):
                 # A hand-over of a gather word: check the inventory (get it first if short).
                 r = brain.plan({"task": "hand_over", "confidence": 1.0, "item": args["item"]},
@@ -226,6 +227,22 @@ class Keve:
             except (KeyError, IndexError):
                 said.append(skill.replace("_", " "))
         return "sequence", {"steps": out, "steps_text": ", then ".join(said)}
+
+    def keep_named_item(self, original, skill, args):
+        """The translator said 'put your stuff in the chest' for 'put the stone pic in the
+        chest', or 'bring me the item' for 'give it to me': put the actual item back."""
+        if skill not in ("put", "give") or args.get("items") or args.get("item"):
+            return skill, args
+        if re.search(r"\b(everything|all|your stuff|your things|inventory|all your)\b", original.lower()):
+            return skill, args
+        named = brain.named_item(original.lower())
+        if named is None and re.search(r"\b(it|that|this one|the thing)\b", original.lower()):
+            named = getattr(self.ctx, "last_item", None)
+        if named is None:
+            return skill, args
+        if skill == "put":
+            return "put", dict(args, item=named.removeprefix("minecraft:"))
+        return "give", {"items": [named], "count": 1}
 
     def plan_steps(self, speaker, steps):
         """Several orders in one message: each step read on its own (reflexes, then Kev),
@@ -281,7 +298,9 @@ class Keve:
         except Exception:
             seen = []
         sees = ", ".join(f"{k} ({d:.0f} blocks away)" for k, c, d in seen) or "nothing special"
-        return f"Keve is carrying: {carrying}. Keve is doing: {doing}. Keve can see: {sees}."
+        last = getattr(self.ctx, "last_item", None) if getattr(self, "ctx", None) else None
+        last = f" Keve just made/got: {last.removeprefix('minecraft:').replace('_', ' ')} (that's what 'it' means)." if last else ""
+        return f"Keve is carrying: {carrying}. Keve is doing: {doing}. Keve can see: {sees}.{last}"
 
     def addressed_by_name(self, low):
         n = self.name.lower()

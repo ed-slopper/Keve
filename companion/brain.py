@@ -422,7 +422,7 @@ def route_plant(text):
     return "plant", {"item": item, "count": n or 1}
 
 
-TYPOS = [(re.compile(r"\bpi[ck]{1,2}ax(e)?s?\b|\bpick ax(e)?s?\b"), "pickaxe")]
+TYPOS = [(re.compile(r"\bpi[ck]{1,2}ax(e)?s?\b|\bpick ax(e)?s?\b|\bpics?\b|\bpikk?(s|axe?s?)?\b"), "pickaxe")]
 
 
 def fix_typos(text):
@@ -430,6 +430,22 @@ def fix_typos(text):
     for pat, word in TYPOS:
         text = pat.sub(word, text)
     return text
+
+
+def named_item(text):
+    """A particular item named in `text` ('the stone pic' -> minecraft:stone_pickaxe), or None.
+    Plain gather words (wood, sand) don't count: those mean 'some of that'."""
+    text = fix_typos(text)
+    tool = find_craftable(text)
+    if tool and re.search(r"_(pickaxe|sword|axe|shovel)$", tool):
+        return "minecraft:" + tool
+    import world_names
+    names = world_names.names()
+    if names:
+        item, label = names.item_in(text)
+        if item and (len(label.split()) >= 2 or not (find_item(text) or find_ore(text))):
+            return item
+    return None
 
 
 def route_give_item(text):
@@ -499,7 +515,10 @@ def route_chest(text):
         return None
     give = bool(GIVE_BACK.search(text))
     count = parse_count(text)
-    word = find_item(text) or find_ore(text) or find_craftable(text)
+    text = fix_typos(text)
+    # A particular item ("the stone pickaxe") beats a gather word inside it ("stone").
+    named = named_item(re.sub(r"\b(chests?|barrels?)\b", " ", text))
+    word = (named.removeprefix("minecraft:") if named else None) or find_item(text) or find_ore(text)         or find_craftable(text)
     craftable = find_craftable(text)
     if craftable and re.search(r"\b(make|craft|build)\b", text):
         return "craft", {"item": craftable, "count": count or 1, "give": give, "from_chest": True,

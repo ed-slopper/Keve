@@ -71,6 +71,7 @@ class Ctx:
         self.self_name = self_name
         self.memory = {}          # (x, y, z) -> (block name, time seen); filled only by sight
         self.bad_targets = {}     # (x, y, z) -> failures
+        self.last_item = None     # what Keve last made or got: 'give it to me' means this
         self.recent_breaks = []   # (x, y, z, time): Keve saw these break, so it knows the drops are there
         self.last_item = None     # what it gathered last ("bring them to me")
         self.provoked = {}        # mob type -> when it last hurt Keve or you
