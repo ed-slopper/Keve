@@ -362,6 +362,23 @@ class Ctx:
                 return True
         return False
 
+    def clear_leaves_around(self):
+        """Leaves (or bushes) at head or foot height round him: break them, like a player
+        punching out of a thicket. True when any were broken."""
+        x, y, z = self.state()["player"]["block_pos"]
+        r = self.senses.call(f"blocks {x - 2} {y} {z - 2} {x + 2} {y + 1} {z + 2}").get("blocks", [])
+        soft = [(b[0], b[1], b[2]) for b in r if any(k in b[3] for k in ("leaves", "azalea", "bush", "vine"))]
+        soft.sort(key=lambda c: math.dist(c, (x, y, z)))
+        broke = 0
+        for c in soft[:12]:
+            self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+            if not self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 4").get("error"):
+                broke += 1
+        if broke:
+            import journal
+            journal.log("note", f"cleared {broke} leaves to get out")
+        return broke > 0
+
     def in_hole(self):
         """In a pit: ground at foot height on all four sides (the night shelter, a hole he dug,
         a 1-wide shaft), so walking won't get him out."""
@@ -1172,6 +1189,13 @@ class Gather(Task):
                     ctx.bad_targets[t] = 2  # no way to it: don't keep trying this one
                     import journal
                     journal.log("note", f"gather {what}: can't walk to {t}", why=str(r.get("error", ""))[:120])
+                    self._no_path = getattr(self, "_no_path", 0) + 1
+                    if self._no_path >= 3 and ctx.clear_leaves_around():
+                        # Boxed in under leaves (a low canopy at head height): punched
+                        # out, so try those trees again.
+                        self._no_path = 0
+                        for k in [k for k, v in ctx.bad_targets.items() if v >= 2]:
+                            ctx.bad_targets.pop(k, None)
                     continue
             seen = ctx.still_there_and_visible(t, block_ok)
             if seen == "gone":

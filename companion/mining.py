@@ -660,6 +660,8 @@ class Mine(Task):
             ctx.body.call(f"goto {back[0] + 0.5:.2f} {back[1]:.2f} {back[2] + 0.5:.2f} --near 1 --timeout 8 --sprint")
         end = time.time() + 90
         while time.time() < end and not self.done():
+            if ctx.survive():
+                continue  # in water (or fire): out of it before anything else
             if self.guard(owner_radius=0.0, self_radius=4.0):
                 continue  # something followed him: deal with it
             ctx.maybe_eat(below=19)

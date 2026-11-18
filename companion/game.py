@@ -392,7 +392,8 @@ class BeatTheGame(Task):
     def fix_offhand(self):
         """A tool stuck in the off hand (from a swap gone wrong): back into the hand."""
         inv = self.ctx.body.call("inventory")
-        off = (inv.get("offhand") or {}).get("item", "") if isinstance(inv.get("offhand"), dict) else str(inv.get("offhand") or "")
+        off = inv.get("offhand")
+        off = (off.get("item") or "") if isinstance(off, dict) else str(off or "")
         if any(k in off for k in ("pickaxe", "sword", "_axe", "shovel")):
             empty = next((s["slot"] for s in inv.get("hotbar", []) if not s.get("item")), None)
             if empty is not None:
