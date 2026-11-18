@@ -447,7 +447,7 @@ class Rescue(Task):
                 miner.plug(cells)
                 ctx.say("lava back there! I plugged it. let's find another way.")
                 return
-            if ty <= my and not miner.seal_cave(cells, tuple(me)):
+            if ty <= my and not miner.seal_cave(cells, tuple(me), enter=True):  # the cave is on the way to you
                 ctx.say("big cave in the way, I boarded it up. go around?")
                 return
             ctx.body.call(f"goto {step[0] + 0.5:.2f} {ty:.2f} {step[1] + 0.5:.2f} --near 0.4 --timeout 3 --direct")

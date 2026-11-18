@@ -713,26 +713,32 @@ class Mine(Task):
         return None
 
     # --- caves: where the mobs come from --------------------------------------------
-    def seal_cave(self, opened, at):
+    def seal_cave(self, opened, at, enter=False):
         """Did digging just open a hole into a cave? Small openings get boarded up with
         cobblestone (the mobs in there can't get at him); a big cave means turning the
-        staircase another way. True: carry on this way. False: this way is shut."""
+        staircase another way. True: carry on this way. False: this way is shut.
+        A cave with the ore he's after in sight is gone into, not shut; and when he's
+        digging to somewhere (to you), the cave on the way is just part of the way."""
+        if enter:
+            return True
         tunnel = {tuple(c) for c in opened} | {at, (at[0], at[1] + 1, at[2]), (at[0], at[1] + 2, at[2])}
         for p in ((self.track or {}).get("path") or [])[-12:]:
             p = tuple(p)
             tunnel |= {p, (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])}
-        snap = self.snap(opened[0], 5)
+        snap = self.snap(opened[0], 8)
         # Open air the sky reaches is just outside (the top of the stairs), not a cave.
-        lo = (at[0] - 6, at[1] - 6, at[2] - 6)
+        R = 8
+        lo = (at[0] - R, at[1] - R, at[2] - R)
         try:
-            lit = self.ctx.senses.call(f"light {lo[0]} {lo[1]} {lo[2]} {at[0] + 6} {at[1] + 6} {at[2] + 6}")
+            lit = self.ctx.senses.call(f"light {lo[0]} {lo[1]} {lo[2]} {at[0] + R} {at[1] + R} {at[2] + R}")
             sky_s = lit.get("sky", "")
         except Exception:
             sky_s = ""
 
         def outdoors(c):
-            i = ((c[1] - lo[1]) * 13 + (c[2] - lo[2])) * 13 + (c[0] - lo[0])  # x fastest, then z, then y
-            if not (0 <= c[0] - lo[0] < 13 and 0 <= c[1] - lo[1] < 13 and 0 <= c[2] - lo[2] < 13):
+            w = 2 * R + 1
+            i = ((c[1] - lo[1]) * w + (c[2] - lo[2])) * w + (c[0] - lo[0])  # x fastest, then z, then y
+            if not (0 <= c[0] - lo[0] < w and 0 <= c[1] - lo[1] < w and 0 <= c[2] - lo[2] < w):
                 return False
             ch = sky_s[i] if 0 <= i < len(sky_s) else "."
             return ch != "." and int(ch, 16) >= 10
@@ -749,11 +755,11 @@ class Mine(Task):
             return True
         # How big is the open space behind the holes? (A pocket of one or two is nothing.)
         seen, todo = set(holes), list(holes)
-        while todo and len(seen) < 40:
+        while todo and len(seen) < 120:
             p = todo.pop()
             for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
                 n = (p[0] + d[0], p[1] + d[1], p[2] + d[2])
-                if n in seen or n in tunnel or math.dist(n, at) > 6:
+                if n in seen or n in tunnel or math.dist(n, at) > R:
                     continue
                 name = snap.name(n)
                 if not is_solid(name) and not sight.is_fluid(name) and not outdoors(n):
@@ -761,8 +767,17 @@ class Mine(Task):
                     todo.append(n)
         if len(seen) < 4:
             return True
+        # What he came for, in there? Then in he goes (and the ore is mined as he passes).
+        for p in seen:
+            for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                o = ore_of(snap.name((p[0] + d[0], p[1] + d[1], p[2] + d[2])))
+                if o and o in getattr(self, "wanted", ()) and o != "coal":
+                    if not getattr(self, "_told_cave_ore", False):
+                        self.ctx.say(f"ooh, {o} in this cave! going in.")
+                        self._told_cave_ore = True
+                    return True
         cobble = self.counts_of("cobblestone") + self.counts_of("cobbled_deepslate")
-        if len(seen) >= 40 or cobble < len(holes):
+        if len(seen) >= 120 or cobble < len(holes):
             self.ctx.say("a big cave! boarding it up and digging another way.")
             self.plug(sorted(opened, key=lambda c: -c[1]))
             self.cave_turns = getattr(self, "cave_turns", 0) + 1
