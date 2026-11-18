@@ -241,6 +241,7 @@ class Crafter:
 
     def ensure_station(self, kind):
         """A placed table or furnace within reach: one that's already out, or Keve places his own."""
+        self.ctx.body.call("close")  # a chest or furnace screen left open blocks placing
         there = self.placed_station(kind)
         if there:
             return there

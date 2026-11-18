@@ -204,26 +204,54 @@ class Ctx:
     JUNK = ("andesite", "diorite", "granite", "tuff", "dirt", "gravel", "leaf_litter",
             "sapling", "flint", "calcite", "dripstone", "netherrack", "cobbled_deepslate")
 
+    # What's worth carrying; anything else (terracotta, clay, stone of every kind, flowers...)
+    # goes when the pockets fill up.
+    KEEP_WORDS = ("pickaxe", "axe", "shovel", "hoe", "sword", "bow", "arrow", "shield", "helmet", "chestplate",
+                  "leggings", "boots", "ore", "raw_", "ingot", "nugget", "diamond", "emerald", "lapis", "redstone",
+                  "coal", "torch", "stick", "planks", "_log", "crafting_table", "furnace", "chest", "bucket",
+                  "obsidian", "flint", "string", "leather", "ender", "blaze", "observer", "bed", "boat", "cooked_",
+                  "beef", "porkchop", "mutton", "chicken", "rabbit", "bread", "apple", "carrot", "potato", "cod",
+                  "salmon", "melon_slice", "wheat", "sapling", "book", "gunpowder", "bone", "quartz", "gold",
+                  "netherrack", "food")
+
     def drop_junk(self, keep_cobble=64):
-        """When the inventory is getting full, throw away stone and dirt it doesn't need."""
+        """When the inventory is getting full, throw out what isn't worth carrying (see
+        KEEP_WORDS): each junk stack is put in the last hotbar slot and thrown with Q, like a
+        player clearing his pockets. (Clicking stacks out of the screen one after another
+        was too quick for the game: one stack in five went.)"""
         inv = self.body.call("inventory")
         slots = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
         if len(slots) < 30:
             return
+        self.body.call("close")  # a furnace or chest left open would take the clicks
         yaw = self.state()["player"]["yaw"]
-        self.body.call(f"look {yaw + 180:.0f} 20")  # throw it behind, back up the tunnel
+        self.body.call(f"look {yaw + 180:.0f} -30")  # throw it up and behind, back up the tunnel
         cobble = 0
+        junk = []
         for s in slots:
             it = s["item"]
-            if it == "minecraft:cobblestone":
+            if it in ("minecraft:cobblestone", "minecraft:cobbled_deepslate"):
                 cobble += s.get("count", 0)
                 if cobble <= keep_cobble:
-                    continue
-            elif not any(j in it for j in self.JUNK):
+                    continue  # a stack for building, plugging and pickaxes
+            elif any(k in it for k in self.KEEP_WORDS):
                 continue
-            self.body.call("open-inventory")
-            self.body.call(f"click-slot {s['slot']}")
-            self.body.call("close")  # a stack held on the cursor is thrown when it closes
+            junk.append(s)
+        for s in junk:
+            if s["slot"] > 8:  # in the pack: swap it into hotbar slot 8 first
+                self.body.call("open-inventory")
+                self.body.call("wait 2")
+                self.body.call(f"click-slot {s['slot']}")   # pick the junk up
+                self.body.call("click-slot 8")              # put it in slot 8 (picks up what was there)
+                self.body.call(f"click-slot {s['slot']}")   # and that goes back where the junk was
+                self.body.call("close")
+                self.body.call("wait 2")
+            self.body.call(f"select minecraft:{s['item'].removeprefix('minecraft:')}")
+            self.body.call("drop all")
+        now = self.body.call("inventory")
+        after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
+        import journal
+        journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}")
 
     # --- ground where breaking doesn't stick (spawn protection, a claim) --------------
     def block_came_back(self, p, ok):

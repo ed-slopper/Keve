@@ -318,6 +318,7 @@ class Mine(Task):
     track = None  # the staircase being dug (none for a quick dig for stone)
     steps = 0
     dir = (0, 1)  # which way the stairs go (set from his facing when a dig starts)
+    dug = None    # every block this dig has opened
 
     def run(self):
         self.track = None
@@ -531,6 +532,10 @@ class Mine(Task):
             return True
         inv = self.ctx.body.call("inventory")
         used = sum(1 for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item"))
+        if used >= 33:
+            self.ctx.drop_junk()  # the rock he dug through: out
+            inv = self.ctx.body.call("inventory")
+            used = sum(1 for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item"))
         if used >= 35:
             self.ctx.say("my inventory is full.")
             return True
@@ -687,6 +692,9 @@ class Mine(Task):
         if r.get("error"):
             return False
         self.ctx.recent_breaks.append((cell[0], cell[1], cell[2], time.time()))
+        if self.dug is None:
+            self.dug = set()
+        self.dug.add(tuple(cell))  # his own tunnels: never mistaken for a cave
         return True
 
     def right_tool(self, name):
@@ -736,9 +744,10 @@ class Mine(Task):
         if enter:
             return True
         tunnel = {tuple(c) for c in opened} | {at, (at[0], at[1] + 1, at[2]), (at[0], at[1] + 2, at[2])}
-        for p in ((self.track or {}).get("path") or [])[-12:]:
+        for p in ((self.track or {}).get("path") or []):
             p = tuple(p)
             tunnel |= {p, (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])}
+        tunnel |= self.dug or set()
         snap = self.snap(opened[0], 8)
         # Open air the sky reaches is just outside (the top of the stairs), not a cave.
         R = 8
@@ -746,8 +755,17 @@ class Mine(Task):
         try:
             lit = self.ctx.senses.call(f"light {lo[0]} {lo[1]} {lo[2]} {at[0] + R} {at[1] + R} {at[2] + R}")
             sky_s = lit.get("sky", "")
+            block_s = lit.get("block", "")
         except Exception:
-            sky_s = ""
+            sky_s = block_s = ""
+
+        def torch_lit(c):
+            w = 2 * R + 1
+            if not (0 <= c[0] - lo[0] < w and 0 <= c[1] - lo[1] < w and 0 <= c[2] - lo[2] < w):
+                return False
+            i = ((c[1] - lo[1]) * w + (c[2] - lo[2])) * w + (c[0] - lo[0])
+            ch = block_s[i] if 0 <= i < len(block_s) else "."
+            return ch != "." and int(ch, 16) >= 5
 
         def outdoors(c):
             w = 2 * R + 1
@@ -781,6 +799,9 @@ class Mine(Task):
                     todo.append(n)
         if len(seen) < 4:
             return True
+        # Lit by torches: one of his own old tunnels (from an earlier trip), not a cave.
+        if sum(1 for c in seen if torch_lit(c)) >= 0.5 * len(seen):
+            return True
         # What he came for, in there? Then in he goes (and the ore is mined as he passes).
         for p in seen:
             for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
@@ -790,6 +811,14 @@ class Mine(Task):
                         self.ctx.say(f"ooh, {o} in this cave! going in.")
                         self._told_cave_ore = True
                     return True
+        # Caves show ore: take what he's after that he can see from the opening first
+        # (that's where a player gets most iron), then shut it.
+        if getattr(self, "wanted", None) and not getattr(self, "_in_cave_look", False):
+            self._in_cave_look = True
+            try:
+                self.take_visible_ores(radius=10)
+            finally:
+                self._in_cave_look = False
         cobble = self.counts_of("cobblestone") + self.counts_of("cobbled_deepslate")
         if len(seen) >= 120 or cobble < len(holes):
             self.ctx.say("a big cave! boarding it up and digging another way.")
@@ -962,18 +991,18 @@ class Mine(Task):
             self.ctx.drop_junk()
         self.ctx.select_best(PICKAXES)
 
-    def take_visible_ores(self):
+    def take_visible_ores(self, radius=6):
         """Mine every wanted ore Keve can see from here (and the vein behind it)."""
         for _ in range(12):  # an ore at a time, then look again (veins open up)
             if self.done():
                 return
             eye = tuple(self.ctx.state()["player"]["eye"])
-            snap = self.snap(eye, 6)
+            snap = self.snap(eye, radius)
             seen = []
             for pos, name in snap.blocks.items():
                 o = ore_of(name)
                 if o in self.wanted and ORES[o][2] <= max(self.prov.pick_tier(), 0) and \
-                        snap.block_visible(eye, pos, 6.0):
+                        snap.block_visible(eye, pos, float(radius)):
                     seen.append(pos)
             if not seen:
                 return
