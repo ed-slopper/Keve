@@ -48,8 +48,8 @@ class BeatTheGame(Task):
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
                 and have(c, "bucket", "water_bucket", "lava_bucket") and self.has_shield(), self.iron_gear),
             ("diamonds", lambda: have(c, "diamond_pickaxe") and have(c, "diamond_sword"), self.diamonds),
-            ("obsidian", lambda: have(c, "obsidian", n=10), self.not_yet("making obsidian (water on lava)")),
-            ("nether portal", lambda: self.flag("portal"), self.not_yet("building and lighting a nether portal")),
+            ("obsidian", lambda: have(c, "obsidian", n=10) or self.flag("portal"), self.obsidian),
+            ("nether portal", lambda: self.flag("portal"), self.nether_portal),
             ("blaze rods", lambda: have(c, "blaze_rod", "blaze_powder", n=6), self.not_yet("finding a nether fortress and blazes")),
             ("ender pearls", lambda: have(c, "ender_pearl", "ender_eye", n=12), self.not_yet("hunting endermen")),
             ("eyes of ender", lambda: have(c, "ender_eye", n=12), self.not_yet("crafting eyes of ender")),
@@ -417,6 +417,19 @@ class BeatTheGame(Task):
         steps = [("craft", {"item": i, "count": 1}) for i in ("diamond_pickaxe", "diamond_sword") if not have(self.ctx, i)]
         if steps:
             self.sub(_life.Sequence, steps=steps)
+
+    def obsidian(self):
+        import nether
+        nether.Obsidian(self, want=10).run()
+
+    def nether_portal(self):
+        import nether
+        p = nether.Portal(self)
+        if p.run() and p.go_through():
+            q = self.progress()
+            q.setdefault("flags", {})["portal"] = True
+            self.save(q)
+            self.ctx.say("WE'RE IN THE NETHER!")
 
     def not_yet(self, what):
         def run():

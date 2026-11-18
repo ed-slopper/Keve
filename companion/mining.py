@@ -25,7 +25,7 @@ ORES = {
 }
 PICK_TIER = {"wooden_pickaxe": 0, "golden_pickaxe": 0, "stone_pickaxe": 1, "iron_pickaxe": 2,
              "diamond_pickaxe": 3, "netherite_pickaxe": 4}
-TIER_PICK = {0: "wooden_pickaxe", 1: "stone_pickaxe", 2: "iron_pickaxe"}
+TIER_PICK = {0: "wooden_pickaxe", 1: "stone_pickaxe", 2: "iron_pickaxe", 3: "diamond_pickaxe"}
 DIRS = [(0, 1), (-1, 0), (0, -1), (1, 0)]  # south, west, north, east (yaw 0, 90, 180, 270)
 DANGER = ("lava", "water", "fire")
 UNBREAKABLE = ("bedrock", "barrier", "end_portal_frame", "reinforced_deepslate")
