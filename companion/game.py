@@ -73,6 +73,8 @@ class BeatTheGame(Task):
         ctx = self.ctx
         q = self.progress()
         ctx.say("ok, let's BEAT THE GAME! stage by stage, all the way to the dragon.")
+        if not self.night() and ctx.in_hole():
+            ctx.climb_out(self)
         for name, check, do in self.stages():
             if self.done():
                 return
@@ -200,11 +202,7 @@ class BeatTheGame(Task):
         if self.done():
             return
         ctx.say("morning! back to it.")
-        for _ in range(4):
-            if not mining.underground(ctx) and m.pos()[1] >= y + 2:
-                break
-            if not m.stair_up():
-                m.turn()
+        ctx.climb_out(self)
 
     def travel(self, tx, tz, step=10):
         """Walk toward (tx, tz) over whatever's in the way, in straight legs of `step`
@@ -225,7 +223,16 @@ class BeatTheGame(Task):
                 break
             k = min(1.0, step / d)
             lx, lz = pos[0] + (tx - pos[0]) * k, pos[2] + (tz - pos[2]) * k
-            ctx.body.call(f"goto {lx:.1f} {pos[1]:.1f} {lz:.1f} --near 2 --timeout 8 --direct --sprint")
+            if self.safe_line(pos, lx, lz):
+                ctx.body.call(f"goto {lx:.1f} {pos[1]:.1f} {lz:.1f} --near 2 --timeout 8 --direct --sprint")
+            else:
+                # A cliff or tree tops that way: let the path planner (it won't drop more
+                # than three blocks) find the way, or turn a bit.
+                r = ctx.walk_to((lx, pos[1], lz), near=4, timeout=10, task=self)
+                if not r.get("arrived") and r.get("distance", 99) > 6:
+                    ang = math.atan2(tz - pos[2], tx - pos[0]) + 1.0
+                    dist = math.hypot(tx - pos[0], tz - pos[2])
+                    tx, tz = pos[0] + dist * math.cos(ang), pos[2] + dist * math.sin(ang)
             if self.guard(owner_radius=0.0, self_radius=5.0):
                 continue
             after = ctx.eye_and_view()[3]
@@ -238,6 +245,28 @@ class BeatTheGame(Task):
                 stuck = 0
         end = ctx.eye_and_view()[3]
         return math.hypot(end[0] - start[0], end[2] - start[2])
+
+    def safe_line(self, pos, lx, lz):
+        """Can he walk straight there? No drop of more than three blocks on the way, and no
+        walking over tree tops (he'd fall off the leaves)."""
+        import math
+        import sight
+        ctx = self.ctx
+        snap = sight.Snapshot.read(ctx.senses, pos, rh=12, rv=8)
+        y0 = math.floor(pos[1])
+        n = max(2, int(math.hypot(lx - pos[0], lz - pos[2])))
+        for i in range(1, n + 1):
+            f = i / n
+            x, z = math.floor(pos[0] + (lx - pos[0]) * f), math.floor(pos[2] + (lz - pos[2]) * f)
+            floor = None
+            for y in range(y0 + 2, y0 - 6, -1):
+                name = snap.name((x, y - 1, z))
+                if sight.blocks_body(name) or sight.is_fluid(name):
+                    floor = (y, name)
+                    break
+            if floor is None or y0 - floor[0] > 3 or "leaves" in floor[1]:
+                return False
+        return True
 
     def climb_out(self, tx, tz, steps=6):
         """Out of a pit: dig steps up toward where he's headed, a few blocks."""
@@ -256,19 +285,21 @@ class BeatTheGame(Task):
     def cook(self):
         import craft
         import mining
-        raw = sum(self.ctx.counts().get("minecraft:" + m, 0) for m in RAW_MEAT)
-        if not raw:
-            return
         prov = mining.Provision(self.ctx, self)
-        try:
-            prov.ensure("furnace", 1)
-            prov.crafter.smelt("raw_meat", raw)
-        except (craft.NeedMore, RuntimeError) as e:
-            if getattr(e, "what", "") == "fuel":
-                prov.get_raw("log", 4, 0)
-                prov.crafter.smelt("raw_meat", raw)
-            else:
-                raise
+        # One kind at a time (a furnace cooks one stack): all the beef, then the chicken...
+        for meat in RAW_MEAT:
+            raw = min(64, self.ctx.counts().get("minecraft:" + meat, 0))
+            if not raw or self.done():
+                continue
+            try:
+                prov.ensure("furnace", 1)
+                prov.crafter.smelt(meat, raw)
+            except (craft.NeedMore, RuntimeError) as e:
+                if getattr(e, "what", "") == "fuel":
+                    prov.get_raw("log", max(3, raw // 4), 0)
+                    prov.crafter.smelt(meat, raw)
+                else:
+                    raise
 
     IRON = 17  # pickaxe 3, sword 2, bucket 3, chestplate 8, flint and steel 1
 

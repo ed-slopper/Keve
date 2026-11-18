@@ -24,6 +24,8 @@ INGREDIENTS = {
     "crafting_table": lambda i: i == "minecraft:crafting_table",
     "furnace": lambda i: i == "minecraft:furnace",
     "chest": lambda i: i == "minecraft:chest",
+    **{m: (lambda name: (lambda i: i == name))("minecraft:" + m)
+       for m in ("beef", "porkchop", "mutton", "chicken", "rabbit", "cod", "salmon", "potato", "kelp")},
     "raw_meat": lambda i: i in ("minecraft:beef", "minecraft:porkchop", "minecraft:mutton", "minecraft:chicken",
                                 "minecraft:rabbit", "minecraft:cod", "minecraft:salmon"),
 }

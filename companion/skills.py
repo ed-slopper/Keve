@@ -251,6 +251,29 @@ class Ctx:
     def protected(self, p):
         return any(abs(p[0] - z[0]) <= 18 and abs(p[2] - z[2]) <= 18 for z in getattr(self, "zones", []))
 
+    def in_hole(self):
+        """Walls all round at head height (a pit, the night shelter, a 1-wide shaft)."""
+        x, y, z = self.state()["player"]["block_pos"]
+        r = self.senses.call(f"blocks {x - 1} {y + 1} {z - 1} {x + 1} {y + 1} {z + 1}").get("blocks", [])
+        walls = {(b[0], b[2]) for b in r if sight.blocks_body(b[3])}
+        return all((x + dx, z + dz) in walls for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+    def climb_out(self, task, steps=4):
+        """Out of a hole: dig steps up, whichever way gives."""
+        import mining
+        m = mining.Mine(self, ore="coal")
+        m.cancelled = task.cancelled
+        m.prov = mining.Provision(self, m)
+        start_y = m.pos()[1]
+        for d in mining.DIRS:
+            m.dir = d
+            for _ in range(steps):
+                if task.done() or not m.stair_up():
+                    break
+            if m.pos()[1] > start_y and not self.in_hole():
+                return True
+        return False
+
     def quest_items(self):
         """Item ids Keve carries that belong to the job: what it's gathering or mining,
         and what it made for the latest order."""
@@ -997,6 +1020,8 @@ class Gather(Task):
                             ctx.say(f"I can't find any {shown} I can see around here.")
                         return
                     explores += 1
+                    if ctx.in_hole():
+                        ctx.climb_out(self)  # down a pit (last night's shelter): out first
                     ang = random.uniform(0, 2 * math.pi)
                     tx, tz = pos[0] + 14 * math.cos(ang), pos[2] + 14 * math.sin(ang)
                     ctx.body.call(f"goto {tx:.1f} {pos[1]:.1f} {tz:.1f} --near 3 --timeout 12 --direct")
@@ -1009,12 +1034,16 @@ class Gather(Task):
                     return
                 if not r.get("arrived") and r.get("distance", 99) > 4.5:
                     ctx.bad_targets[t] = 2  # no way to it: don't keep trying this one
+                    import journal
+                    journal.log("note", f"gather {what}: can't walk to {t}", why=str(r.get("error", ""))[:120])
                     continue
             seen = ctx.still_there_and_visible(t, block_ok)
             if seen == "gone":
                 continue
             if seen == "hidden":
                 ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
+                import journal
+                journal.log("note", f"gather {what}: {t} is hidden from where I stand")
                 continue
             if what == "wood":
                 # Like a player: knock out the bottom of the trunk, step into its spot, and
@@ -1028,6 +1057,8 @@ class Gather(Task):
                     continue
                 if n == 0:
                     ctx.bad_targets[t] = ctx.bad_targets.get(t, 0) + 1
+                    import journal
+                    journal.log("note", f"gather wood: couldn't chop the trunk at {t}")
                     continue
                 breaks += n
                 time.sleep(0.6)
@@ -1079,7 +1110,7 @@ class Gather(Task):
             while block_ok(snap.name((x, b - 1, z))) and b > y - 12:
                 b -= 1
             ground = snap.name((x, b - 1, z))
-            if not sight.blocks_body(ground) or "leaves" in ground or b > pos[1] + 3:
+            if not sight.blocks_body(ground) or "leaves" in ground or b > pos[1] + 6:
                 continue
             if self.ctx.bad_targets.get((x, b, z), 0) < 2:
                 bases.add((x, b, z))
