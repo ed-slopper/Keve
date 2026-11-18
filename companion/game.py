@@ -50,11 +50,13 @@ class BeatTheGame(Task):
             ("diamonds", lambda: have(c, "diamond_pickaxe") and have(c, "diamond_sword"), self.diamonds),
             ("obsidian", lambda: have(c, "obsidian", n=10) or self.flag("portal"), self.obsidian),
             ("nether portal", lambda: self.flag("portal"), self.nether_portal),
-            ("blaze rods", lambda: have(c, "blaze_rod", "blaze_powder", n=6), self.not_yet("finding a nether fortress and blazes")),
-            ("ender pearls", lambda: have(c, "ender_pearl", "ender_eye", n=12), self.not_yet("hunting endermen")),
-            ("eyes of ender", lambda: have(c, "ender_eye", n=12), self.not_yet("crafting eyes of ender")),
-            ("stronghold", lambda: self.flag("end_portal"), self.not_yet("following eyes of ender to the stronghold")),
-            ("the dragon", lambda: self.flag("dragon"), self.not_yet("fighting the ender dragon")),
+            ("blaze rods", lambda: c.counts().get("minecraft:blaze_rod", 0) + c.counts().get("minecraft:blaze_powder", 0) // 2
+                + c.counts().get("minecraft:ender_eye", 0) // 2 >= 6, self.blaze_rods),
+            ("ender pearls", lambda: have(c, "ender_pearl", "ender_eye", n=12), self.ender_pearls),
+            ("eyes of ender", lambda: have(c, "ender_eye", n=12), self.eyes),
+            ("bow and arrows", lambda: have(c, "bow") and have(c, "arrow", n=24), self.bow),
+            ("stronghold", lambda: self.flag("end"), self.stronghold),
+            ("the dragon", lambda: self.flag("dragon"), self.dragon),
         ]
 
     # --- progress, kept between deaths and sessions ---------------------------------
@@ -431,6 +433,115 @@ class BeatTheGame(Task):
             q.setdefault("flags", {})["portal"] = True
             self.save(q)
             self.ctx.say("WE'RE IN THE NETHER!")
+
+    # --- the Nether, the stronghold, the End ------------------------------------------
+    def dim(self):
+        return str(self.ctx.body.call("state").get("dimension", ""))
+
+    def set_flag(self, name):
+        q = self.progress()
+        q.setdefault("flags", {})[name] = True
+        self.save(q)
+
+    def to_nether(self):
+        import nether
+        if "nether" in self.dim():
+            return True
+        ok = nether.Portal(self).go_through()
+        if ok:
+            p = self.ctx.state()["player"]["position"]
+            mem = life.load_memory()
+            mem.setdefault("places", {})["portal_nether_side"] = [round(v, 2) for v in p]
+            life.save_memory(mem)
+        return ok
+
+    def to_overworld(self):
+        if "overworld" in self.dim():
+            return True
+        p = life.load_memory().get("places", {}).get("portal_nether_side")
+        if not p:
+            self.ctx.say("I don't know where the portal back is!")
+            return False
+        self.ctx.walk_to(tuple(p), near=1.5, timeout=60, task=self)
+        self.ctx.body.call(f"goto {p[0]:.2f} {p[1]:.2f} {p[2]:.2f} --near 0.3 --timeout 4 --direct")
+        for _ in range(20):
+            if "overworld" in self.dim():
+                return True
+            time.sleep(1)
+        return False
+
+    def blaze_rods(self):
+        import nether
+        if not self.to_nether():
+            return
+        nether.NetherHunt(self, rods=6, pearls=0).run()
+
+    def ender_pearls(self):
+        import nether
+        if not self.to_nether():
+            return
+        nether.NetherHunt(self, rods=0, pearls=12).run()
+
+    def eyes(self):
+        import mining
+        prov = mining.Provision(self.ctx, self)
+        try:
+            prov.ensure("ender_eye", 12)
+        except Exception as e:
+            self.ctx.say(f"couldn't make eyes of ender: {e}")
+
+    def hunt_for(self, kinds, item, n):
+        """Like the food hunt: the animal or mob that drops `item`, found by walking out."""
+        import math
+        import random
+        from skills import Hunt
+        ctx = self.ctx
+        heading = random.uniform(0, 2 * math.pi)
+        for trip in range(8):
+            if self.done() or have(ctx, item, n=n):
+                return
+            seen = {e.get("type", "").removeprefix("minecraft:") for e in
+                    ctx.senses.call("entities 40").get("entities", []) if e.get("kind") == "mob"}
+            for kind in [k for k in kinds if k in seen]:
+                self.sub(Hunt, mob=kind, count=3)
+            if have(ctx, item, n=n):
+                return
+            pos = ctx.eye_and_view()[3]
+            heading += random.uniform(-0.6, 0.6)
+            self.travel(pos[0] + 40 * math.cos(heading), pos[2] + 40 * math.sin(heading))
+
+    def bow(self):
+        import mining
+        import nether
+        ctx = self.ctx
+        if not self.to_overworld():
+            return
+        if not have(ctx, "bow"):
+            self.hunt_for(["spider", "cave_spider"], "string", 3)
+        if not have(ctx, "flint", n=6):
+            nether.Portal(self).flint_and_steel()  # its gravel digging gives flint too
+        self.hunt_for(["chicken"], "feather", 6)
+        prov = mining.Provision(ctx, self)
+        for item, n in (("bow", 1), ("arrow", 24)):
+            try:
+                prov.ensure(item, n)
+            except Exception as e:
+                ctx.say(f"couldn't make {item}: {e}")
+
+    def stronghold(self):
+        import end
+        if not self.to_overworld():
+            return
+        if end.Stronghold(self).find():
+            self.set_flag("end")
+            self.ctx.say("WE'RE IN THE END!")
+
+    def dragon(self):
+        import end
+        if "end" not in self.dim() or "nether" in self.dim():
+            return
+        if end.Dragon(self).run():
+            self.set_flag("dragon")
 
     def not_yet(self, what):
         def run():

@@ -291,3 +291,116 @@ class Portal:
                 return True
             time.sleep(1)
         return False
+
+
+class NetherHunt:
+    """In the Nether: tunnel along at fortress height through the netherrack (it mines in
+    an instant) looking for nether bricks; at a fortress, find the blaze spawner and fight
+    the blazes that come for him until he has the rods. Endermen met on the way are
+    hunted for pearls."""
+
+    FORTRESS_Y = 68
+
+    def __init__(self, task, rods=6, pearls=0):
+        self.task = task
+        self.ctx = task.ctx
+        self.rods = rods
+        self.pearls = pearls
+
+    def done(self):
+        return self.task.done()
+
+    def in_nether(self):
+        return "nether" in str(self.ctx.body.call("state").get("dimension", ""))
+
+    def have_enough(self):
+        return count(self.ctx, "blaze_rod") + count(self.ctx, "blaze_powder") // 2 >= self.rods and \
+            count(self.ctx, "ender_pearl") + count(self.ctx, "ender_eye") >= self.pearls
+
+    def run(self):
+        import mining
+        ctx = self.ctx
+        if not self.in_nether():
+            ctx.say("I'm not in the nether.")
+            return False
+        m = mining.Mine(ctx, ore="gold")
+        m.cancelled = self.task.cancelled
+        m.prov = mining.Provision(ctx, m)
+        m.wanted = {"gold"}
+        p = ctx.state()["player"]
+        m.dir = mining.DIRS[round(((p["yaw"] % 360) / 90)) % 4]
+        # Level with the fortresses first.
+        for _ in range(60):
+            if self.done():
+                return False
+            y = m.pos()[1]
+            if abs(y - self.FORTRESS_Y) <= 2:
+                break
+            ok = m.stair_up() if y < self.FORTRESS_Y else m.stair_step()
+            if not ok:
+                m.turn()
+        steps = 0
+        while not self.done() and not self.have_enough() and steps < 800:
+            fortress = self.seen("nether_bricks")
+            if fortress:
+                journal.log("quest", "nether: found a fortress", at=list(fortress))
+                ctx.say("a nether fortress! hunting blazes.")
+                self.blazes(fortress)
+                if self.have_enough():
+                    break
+            self.endermen()
+            if not m.tunnel_step():
+                m.turn()
+                continue
+            m.after_step()
+            steps += 1
+            if steps % 40 == 0:
+                journal.log("quest", f"nether: tunnelled {steps} blocks", at=list(m.pos()))
+        return self.have_enough()
+
+    def seen(self, word, r=16):
+        eye = tuple(self.ctx.state()["player"]["eye"])
+        snap = sight.Snapshot.read(self.ctx.senses, eye, rh=r, rv=8)
+        found = sorted((p for p, n in snap.blocks.items() if word in n), key=lambda p: math.dist(p, eye))
+        for p in found[:20]:
+            if snap.block_visible(eye, p, float(r) + 4):
+                return p
+        return None
+
+    def blazes(self, fortress):
+        """Into the fortress: to the blaze spawner if one shows, fight blazes near it."""
+        ctx = self.ctx
+        ctx.walk_to(tuple(fortress), near=3, timeout=30, task=self.task)
+        end = time.time() + 15 * 60
+        while time.time() < end and not self.done() and not self.have_enough():
+            spawner = self.seen("spawner", r=20)
+            if spawner:
+                ctx.walk_to((spawner[0] + 3, spawner[1], spawner[2]), near=3, timeout=20, task=self.task)
+            fought = False
+            for e in ctx.senses.call("entities 16").get("entities", []):
+                if e.get("type") == "minecraft:blaze" and (e.get("health") or 1) > 0:
+                    ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                    ctx.hunt(e["id"], 15.0, self.task)
+                    fought = True
+                    break
+            time.sleep(0.5)
+            ctx.collect(8, self.task)
+            if not fought and not spawner:
+                # No spawner, no blazes here: along the fortress a bit.
+                b = self.seen("nether_bricks", r=20)
+                if b:
+                    ctx.walk_to(tuple(b), near=2, timeout=15, task=self.task)
+            if self.task.guard(owner_radius=0.0, self_radius=5.0):
+                continue
+
+    def endermen(self):
+        ctx = self.ctx
+        if count(ctx, "ender_pearl") >= self.pearls:
+            return
+        for e in ctx.senses.call("entities 16").get("entities", []):
+            if e.get("type") == "minecraft:enderman":
+                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.hunt(e["id"], 20.0, self.task)
+                time.sleep(0.6)
+                ctx.collect(6, self.task)
+                return

@@ -29,7 +29,7 @@ RAW = {"iron_ingot", "gold_ingot", "copper_ingot", "netherite_ingot", "diamond",
        "charcoal", "redstone", "lapis_lazuli", "raw_iron", "raw_gold", "raw_copper", "wheat", "slime_ball",
        "string", "leather", "feather", "bone", "bone_meal", "gunpowder", "flint", "clay_ball", "glowstone_dust",
        "quartz", "amethyst_shard", "iron_nugget", "gold_nugget", "copper_nugget", "honey_bottle", "resin_clump",
-       "dried_kelp", "melon_slice", "sugar", "paper", "blaze_powder", "ender_pearl"}
+       "dried_kelp", "melon_slice", "sugar", "paper", "ender_pearl"}
 COLOURS = ("white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan",
            "purple", "blue", "brown", "green", "red", "black")
 SINGLE = {"minecraft:stick": "stick", "minecraft:iron_ingot": "iron_ingot", "minecraft:cobblestone": "cobble",
