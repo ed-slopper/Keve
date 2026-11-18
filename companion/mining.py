@@ -586,11 +586,12 @@ class Mine(Task):
         if pick == "iron_pickaxe" and self.counts_of("iron_ingot") < 6:
             pick = "stone_pickaxe"  # spares he can actually make
         picks = max(1, math.ceil(blocks / self.DURABILITY[pick]))
-        if picks <= 1:
+        if picks <= 1 and self.prov.crafter.count("stick") >= 4:
             return
         have = sum(self.counts_of(p) for p in TIER_PICK.values() if PICK_TIER[p] >= PICK_TIER[pick])
         spares = min(picks, 3)  # a pickaxe in hand and two spares; the rest as sticks
-        sticks = 2 * max(0, picks - spares)
+        sticks = max(4, 2 * max(0, picks - spares))  # always a couple of pickaxes' worth: no
+        # wood down there, and a broken pickaxe with no sticks left him stuck at y -33
         kit = [(pick, spares), ("stick", sticks), ("crafting_table", 1)]
         if self.counts_of("coal") + self.counts_of("charcoal"):
             kit.append(("torch", 16))

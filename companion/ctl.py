@@ -19,7 +19,7 @@ BODY_ALLOWED = {
     "goto", "move", "jump", "look", "look-at", "turn", "stop",
     "break", "place", "interact", "use-item", "attack", "wait",
     "select", "drop", "open-inventory", "click-slot", "close",
-    "chat", "respawn", "menu", "key", "status", "mouse",
+    "chat", "respawn", "menu", "key", "status", "mouse", "click-gui",
 }
 # Raw sensors: X-ray if used directly, so only the sight module gets them.
 SENSES_ALLOWED = {"blocks", "entities", "light"}

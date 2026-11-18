@@ -214,6 +214,16 @@ class Ctx:
                   "salmon", "melon_slice", "wheat", "sapling", "book", "gunpowder", "bone", "quartz", "gold",
                   "netherrack", "food")
 
+    def safe_close(self):
+        """Close a screen without throwing what's on the cursor: it goes into an empty slot
+        first (closing with a stack held throws it on the ground)."""
+        inv = self.body.call("inventory")
+        if inv.get("carried"):
+            empty = next((s["slot"] for s in inv.get("main", []) + inv.get("hotbar", []) if not s.get("item")), None)
+            if empty is not None:
+                self.body.call(f"click-slot {empty}")
+        self.body.call("close")
+
     def drop_junk(self, keep_cobble=64):
         """When the inventory is getting full, throw out what isn't worth carrying (see
         KEEP_WORDS): each junk stack is put in the last hotbar slot and thrown with Q, like a
@@ -238,16 +248,18 @@ class Ctx:
                 continue
             junk.append(s)
         for s in junk:
-            if s["slot"] > 8:  # in the pack: swap it into hotbar slot 8 first
-                self.body.call("open-inventory")
-                self.body.call("wait 2")
-                self.body.call(f"click-slot {s['slot']}")   # pick the junk up
-                self.body.call("click-slot 8")              # put it in slot 8 (picks up what was there)
-                self.body.call(f"click-slot {s['slot']}")   # and that goes back where the junk was
-                self.body.call("close")
-                self.body.call("wait 2")
-            self.body.call(f"select minecraft:{s['item'].removeprefix('minecraft:')}")
-            self.body.call("drop all")
+            # One stack at a time: open, let it open, pick the stack up, check it's the junk,
+            # close (closing with a stack held throws it). Anything else picked up by a
+            # click gone wrong is put back, never thrown (swapping stacks round the hotbar
+            # lost him a shield, a bucket and a pickaxe).
+            self.body.call("open-inventory")
+            self.body.call("wait 2")
+            self.body.call(f"click-slot {s['slot']}")
+            carried = (self.body.call("inventory").get("carried") or {}).get("item", "")
+            if carried != s["item"]:
+                self.safe_close()
+                continue
+            self.body.call("close")
         now = self.body.call("inventory")
         after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
         import journal
