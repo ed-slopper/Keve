@@ -573,9 +573,10 @@ class Mine(Task):
             self.ctx.say("my inventory is full.")
             return True
         picks = sum(self.counts_of(p) for p in PICK_TIER)
-        if picks <= 1 and self.counts_of("stick") < 2 and self.prov.crafter.count("planks") < 2:
+        no_table = not self.counts_of("crafting_table") and self.prov.crafter.count("planks") < 4
+        if picks <= 1 and (no_table or (self.counts_of("stick") < 2 and self.prov.crafter.count("planks") < 2)):
             # Last pickaxe and nothing to make another down here: up while it still works.
-            self.ctx.say("this is my last pickaxe and I've no sticks left. heading up while it lasts!")
+            self.ctx.say("this is my last pickaxe and I couldn't make another down here. heading up while it lasts!")
             return True
         need = getattr(self, "need_tier", 0)
         if 0 <= self.prov.pick_tier() < need:
