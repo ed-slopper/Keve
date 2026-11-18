@@ -585,9 +585,11 @@ class Mine(Task):
         picks = sum(self.counts_of(p) for p in PICK_TIER)
         no_table = not self.counts_of("crafting_table") and self.prov.crafter.count("planks") < 4
         if picks <= 1 and (no_table or (self.counts_of("stick") < 2 and self.prov.crafter.count("planks") < 2)):
-            # Last pickaxe and nothing to make another down here: up while it still works.
-            self.ctx.say("this is my last pickaxe and I couldn't make another down here. heading up while it lasts!")
-            return True
+            # Last pickaxe and nothing to make another down here: up while it still works,
+            # some wood for sticks and a table, and back to it.
+            if getattr(self, "resupplies", 0) >= 2 or not self.resupply():
+                self.ctx.say("this is my last pickaxe and I couldn't make another. heading up while it lasts!")
+                return True
         need = getattr(self, "need_tier", 0)
         if 0 <= self.prov.pick_tier() < need:
             # The good pickaxe wore out (diamonds need iron or better): a new one from iron
@@ -678,6 +680,27 @@ class Mine(Task):
                 self.prov.crafter.pick_up_station(pos)
                 self.ctx.placed_stations.remove(pos)
                 return
+
+    def resupply(self):
+        """Up to the surface for wood (sticks, a crafting table, spare pickaxes), then on
+        with the trip from wherever he is. True when he came back with the makings."""
+        ctx = self.ctx
+        self.resupplies = getattr(self, "resupplies", 0) + 1
+        ctx.say("running low on pickaxes and wood, popping up for supplies!")
+        if not go_to_surface(ctx, self):
+            return False
+        try:
+            g = Gather(ctx, item="wood", count=6)
+            g.cancelled = self.cancelled
+            g.run()
+            for item, n in (("crafting_table", 1), ("stick", 6), ("stone_pickaxe", 2)):
+                if self.prov.crafter.count(item) < n:
+                    self.prov.ensure(item, n)
+            self.take_table_along()
+        except Exception as e:
+            ctx.say(f"couldn't restock: {e}")
+            return False
+        return self.counts_of("stick") >= 2 or self.prov.crafter.count("planks") >= 2
 
     def new_pickaxe_down_here(self):
         """The pickaxe broke mid-trip: a new one from what he carries (cobble from the dig,
