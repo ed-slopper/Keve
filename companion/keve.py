@@ -56,6 +56,7 @@ class Keve:
         self.ctrl = Body(self._conns[1])
         senses = Senses(self._conns[2])
         self.ctx = skills.Ctx(self.act, senses, self.say, self.owner, self.name)
+        self.ctx.skip_night = getattr(args, "skip_night", None)  # training: morning by command
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None
         self.ctx.kev = self.kev  # companion mode asks Kev what to do
         self.talk = brain.Talker(args.ollama, args.brain_model, self.name, self.owner)

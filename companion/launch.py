@@ -545,6 +545,8 @@ def main():
                    help="also listen on the microphone (off by default: type in chat, Keve still talks)")
     p.add_argument("--no-translate", action="store_true",
                    help="don't run your words through the chat model first (Kev and the rules only)")
+    p.add_argument("--skip-nights", action="store_true",
+                   help="training: when night falls on a quest, set the time to day (a cheat) instead of hiding")
     p.add_argument("--quest", help="start Keve on a job right away with no one to ask (training), e.g. beat_game")
     p.add_argument("--no-cheats", action="store_true",
                    help="don't make you an operator on Keve's server (no /gamemode, /give...)")
@@ -627,7 +629,10 @@ def main():
                                brain_ctx=profile.get("brain_ctx", 4096), decide_s=profile.get("decide_s", 4),
                                ears=ears, mouth=mouth, no_translate=args.no_translate, whisper=profile.get("whisper") or "small.en",
                                whisper_device=profile.get("whisper_device", "cpu"),
-                               put_head=(lambda: wear_head(srv, args.robot_head)), quest=args.quest)
+                               put_head=(lambda: wear_head(srv, args.robot_head)), quest=args.quest,
+                               skip_night=(lambda: subprocess.run(
+                                   [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set day"],
+                                   capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None)
     if ears != "off" or mouth != "off":
         print(f"Voice: {ears} ears, {mouth} voice. " + ("Say 'Keve, follow me'." if ears != "off" else
               "Mic is off: type to Keve in chat (Keve.bat --mic to talk to him)."))

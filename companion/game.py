@@ -78,6 +78,8 @@ class BeatTheGame(Task):
         for name, check, do in self.stages():
             if self.done():
                 return
+            if name == "food" and name in q["done"] and have(ctx, *FOOD, n=2):
+                continue  # done before; he's eaten some since, but he isn't out
             if check():
                 if name not in q["done"]:
                     q["done"].append(name)
@@ -138,6 +140,9 @@ class BeatTheGame(Task):
         import random
         from skills import Hunt
         ctx = self.ctx
+        import mining
+        if mining.underground(ctx):
+            mining.go_to_surface(ctx, self)  # animals live up top
         heading = random.uniform(0, 2 * math.pi)
         # Somewhere he found animals before: go there first.
         herds = life.load_memory().get("herds", [])
@@ -192,7 +197,15 @@ class BeatTheGame(Task):
         for morning, climb out. (The mobs are out at night; a hole is safe.)"""
         import mining
         ctx = self.ctx
-        if not self.night() or mining.underground(ctx):
+        if not self.night():
+            return
+        skip = getattr(ctx, "skip_night", None)
+        if skip:  # training with nights skipped (Keve.bat --skip-nights): straight to morning
+            journal.log("quest", "night: skipped (training)")
+            skip()
+            time.sleep(1)
+            return
+        if mining.underground(ctx):
             return
         ctx.say("it's getting dark, digging in for the night!")
         journal.log("quest", "night: sheltering")
