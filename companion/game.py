@@ -43,7 +43,7 @@ class BeatTheGame(Task):
             ("stone tools", lambda: have(c, "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe")
                 and have(c, "stone_sword", "iron_sword", "diamond_sword")
                 and have(c, "stone_axe", "iron_axe", "diamond_axe"), self.stone_tools),
-            ("food", lambda: have(c, *FOOD, n=8), self.food),
+            ("food", lambda: have(c, *FOOD, n=5), self.food),
             ("iron", lambda: self.iron_done(), self.iron),
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
                 and have(c, "bucket", "water_bucket", "lava_bucket") and wearing(c, "chestplate"), self.iron_gear),
@@ -154,12 +154,12 @@ class BeatTheGame(Task):
                     if self.travel(spot[0], spot[2], step=12) < 3:
                         break  # not getting anywhere
         for trip in range(6):
-            if self.done() or have(ctx, *FOOD, *RAW_MEAT, n=10):
+            if self.done() or have(ctx, *FOOD, *RAW_MEAT, n=6):
                 break
             seen = {e.get("type", "").removeprefix("minecraft:") for e in
                     ctx.senses.call("entities 40").get("entities", []) if e.get("kind") == "mob"}
             for kind in [a for a in ANIMALS if a in seen]:
-                if self.done() or have(ctx, *FOOD, *RAW_MEAT, n=10):
+                if self.done() or have(ctx, *FOOD, *RAW_MEAT, n=6):
                     break
                 # Behind a hill or a tree: walk over to where it is, then hunt it.
                 near = [e for e in ctx.senses.call("entities 40").get("entities", [])
@@ -169,7 +169,7 @@ class BeatTheGame(Task):
                     ctx.walk_to(tuple(t), near=4, timeout=20, task=self)
                     self.remember_herd(t)
                 self.sub(Hunt, mob=kind, count=4)
-            if have(ctx, *FOOD, *RAW_MEAT, n=10):
+            if have(ctx, *FOOD, *RAW_MEAT, n=6):
                 break
             pos = ctx.eye_and_view()[3]
             heading += random.uniform(-0.5, 0.5)  # mostly straight on: out of a bare biome (a desert)
