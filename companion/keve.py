@@ -605,6 +605,9 @@ class Keve:
             print("[keve] an offline-mode server, join it yourself at 127.0.0.1, then run")
             print("[keve] start_keve.bat 127.0.0.1:25565")
             return
+        if str(hello.get("screen", "")) in ("dead", "death") or (hello.get("player") or {}).get("health", 20) <= 0:
+            self.ctrl.call("respawn")  # he died while no one was driving: back up first
+            time.sleep(2)
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
         threading.Thread(target=self.watch_sneaks, daemon=True).start()
