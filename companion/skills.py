@@ -253,7 +253,7 @@ class Ctx:
             # click gone wrong is put back, never thrown (swapping stacks round the hotbar
             # lost him a shield, a bucket and a pickaxe).
             self.body.call("open-inventory")
-            self.body.call("wait 2")
+            time.sleep(0.35)  # let the screen open ('wait' returns at once here)
             self.body.call(f"click-slot {s['slot']}")
             carried = (self.body.call("inventory").get("carried") or {}).get("item", "")
             if carried != s["item"]:

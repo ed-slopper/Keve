@@ -471,6 +471,14 @@ class Mine(Task):
         self.home = tuple(p["position"])
         self.dir = DIRS[round(((p["yaw"] % 360) / 90)) % 4]
         self.steps = 0
+        skip = getattr(ctx, "skip_night", None)
+        try:
+            t = ctx.body.call("status").get("day_time", 6000) % 24000
+        except Exception:
+            t = 6000
+        if skip and 12000 <= t <= 23300 and not underground(ctx):
+            skip()  # training: no setting off down a staircase at night with mobs about
+            time.sleep(1)
         ctx.say(f"heading down to y {best_y} for {ore}.")
         if not self.reuse_staircase(best_y) or self.track is None:
             self.track = {"top": list(ctx.state()["player"]["position"]), "path": [], "dir": list(self.dir)}
@@ -478,6 +486,8 @@ class Mine(Task):
         blocked = 0
         moves = 0
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
+            if ctx.under_attack() and self.guard(owner_radius=0.0, self_radius=5.0):
+                continue  # something's on him: deal with it before digging on
             if not self.stair_step():
                 blocked += 1
                 import journal
