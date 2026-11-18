@@ -370,6 +370,8 @@ class Recover(Task):
     def run(self):
         ctx = self.ctx
         where = self.args.get("where")
+        if where and len(ctx.counts()) > 3:
+            where = None  # he kept his things (keep_inventory): nothing to go back for
         try:
             t = ctx.body.call("status").get("day_time", 6000) % 24000
         except Exception:
