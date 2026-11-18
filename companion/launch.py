@@ -636,6 +636,9 @@ def main():
                                ears=ears, mouth=mouth, no_translate=args.no_translate, whisper=profile.get("whisper") or "small.en",
                                whisper_device=profile.get("whisper_device", "cpu"),
                                put_head=(lambda: wear_head(srv, args.robot_head)), quest=args.quest,
+                               unstick=(lambda: subprocess.run(
+                                   [str(srv), "--dir", str(SERVER_DIR), "cmd", "kill Keve"],
+                                   capture_output=True, creationflags=NO_WINDOW)) if args.keep_inventory else None,
                                skip_night=(lambda: subprocess.run(
                                    [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set day"],
                                    capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None)

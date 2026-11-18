@@ -1300,6 +1300,15 @@ def go_to_surface(ctx, task):
             ctx.say("too hurt to keep climbing, and I can't heal. help!")
             return False
         if m.prov.pick_tier() < 0 and not m.new_pickaxe_down_here():
+            unstick = getattr(ctx, "unstick", None)
+            if unstick:
+                # Training: hopelessly stuck down here (no pickaxe, nothing to make one): a
+                # respawn at the surface, keeping his things, instead of an hour by hand.
+                journal.log("quest", "stuck deep with no pickaxe: respawning (training)")
+                ctx.say("stuck down here with no pickaxe, respawning up top.")
+                unstick()
+                time.sleep(6)
+                return False
             if not getattr(m, "_told_bare", False):
                 ctx.say("no pickaxe and nothing to make one: digging up by hand. this'll take a while!")
                 journal.log("quest", "climbing out with bare hands")
