@@ -381,7 +381,7 @@ class Ctx:
             if task is not None and task.done():
                 break
             ents = self.senses.call(f"entities {radius:.0f}").get("entities", [])
-            items = [e for e in ents if e.get("kind") == "item" and e["id"] not in tried]
+            items = [e for e in ents if e.get("kind") == "item" and e.get("id") not in tried]
             if not items:
                 break
             eye, _, _, _ = self.eye_and_view()
@@ -425,7 +425,7 @@ class Ctx:
         stalled = 0
         while time.time() < end and not (task is not None and task.done()):
             ents = self.senses.call("entities 24").get("entities", [])
-            mob = next((e for e in ents if e["id"] == mob_id), None)
+            mob = next((e for e in ents if e.get("id") == mob_id), None)
             if mob is None or (mob.get("health") is not None and mob["health"] <= 0):
                 break
             last = mob
@@ -1210,7 +1210,7 @@ class Hunt(Task):
             ctx.hunt(target["id"], 20.0, self)
             if self.done():
                 return
-            gone = not any(e["id"] == target["id"] for e in
+            gone = not any(e.get("id") == target["id"] for e in
                            ctx.senses.call("entities 24").get("entities", []))
             if gone:
                 killed += 1

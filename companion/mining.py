@@ -317,6 +317,7 @@ class Mine(Task):
     NEAR_MINE = 48
     track = None  # the staircase being dug (none for a quick dig for stone)
     steps = 0
+    dir = (0, 1)  # which way the stairs go (set from his facing when a dig starts)
 
     def run(self):
         self.track = None
@@ -897,6 +898,8 @@ class Mine(Task):
         if bad and "lava" in bad:
             self.plug([(x + dx, y + 2, z + dz), (x, y + 2, z)])
             return False
+        if not self.seal_cave([(x + dx, y + 2, z + dz), (x + dx, y + 1, z + dz), (x, y + 2, z)], (x, y, z)):
+            return False  # a cave full of mobs is no way up: another direction
         step = (x + dx, y, z + dz)
         if not is_solid(self.snap(step, 1).name(step)):
             placed = False
@@ -1079,6 +1082,9 @@ def go_to_surface(ctx, task):
             return True
         if n % 10 == 0:
             journal.log("note", "climbing to the surface", y=m.pos()[1])
+        if ctx.state()["player"].get("health", 20) <= 8 and not m.heal():
+            ctx.say("too hurt to keep climbing, and I can't heal. help!")
+            return False
         if m.prov.pick_tier() < 0 and not m.new_pickaxe_down_here():
             ctx.say("my pickaxe broke and I can't make another down here. I'm stuck!")
             journal.log("quest", "stuck underground: no pickaxe and nothing to make one")

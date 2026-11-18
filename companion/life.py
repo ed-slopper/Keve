@@ -370,6 +370,17 @@ class Recover(Task):
     def run(self):
         ctx = self.ctx
         where = self.args.get("where")
+        try:
+            t = ctx.body.call("status").get("day_time", 6000) % 24000
+        except Exception:
+            t = 6000
+        if where and 12800 <= t <= 23200:
+            ctx.say("it's night, the mobs are out. leaving my stuff!")
+            where = None
+        if where and self.args.get("cause", "") and any(k in self.args["cause"] for k in
+                                                        ("mob", "arrow", "explosion", "player"))                 and where[1] < 50:
+            ctx.say("whatever got me is still down there. leaving my stuff!")
+            where = None
         if where and len([d for d in dangers() if math.dist(d["pos"], where) < 8]) >= 2:
             ctx.say("I keep dying back there, my stuff isn't worth it. leaving it!")
             where = None

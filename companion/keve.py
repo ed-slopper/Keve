@@ -662,8 +662,8 @@ class Keve:
                     where = ev.get("position")
                     if resume or where:
                         # Back for his things, then on with the job (the quest outlives him).
-                        threading.Timer(4.0, lambda r=resume, w=where: self.start_task(
-                            "recover", {"where": w, "resume": r})).start()
+                        threading.Timer(4.0, lambda r=resume, w=where, c=ev.get("cause") or "": self.start_task(
+                            "recover", {"where": w, "resume": r, "cause": c})).start()
             last = max(last, r.get("last", last))
             time.sleep(0.25)
 
