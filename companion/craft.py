@@ -24,6 +24,8 @@ INGREDIENTS = {
     "crafting_table": lambda i: i == "minecraft:crafting_table",
     "furnace": lambda i: i == "minecraft:furnace",
     "chest": lambda i: i == "minecraft:chest",
+    "raw_meat": lambda i: i in ("minecraft:beef", "minecraft:porkchop", "minecraft:mutton", "minecraft:chicken",
+                                "minecraft:rabbit", "minecraft:cod", "minecraft:salmon"),
 }
 for _tool in ("wooden", "stone", "iron", "diamond", "golden", "netherite"):
     for _kind in ("pickaxe", "sword", "axe", "shovel", "hoe"):

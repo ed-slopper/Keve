@@ -381,6 +381,8 @@ def route_dig_to(text):
 
 
 def reflex_route(text):
+    if re.search(r"\b(beat|finish|complete|win) (the |minecraft|the whole )?(game|minecraft)\b|\bkill the (ender )?dragon\b", text):
+        return "beat_game", {}
     dig = route_dig_to(text)
     if dig:
         return dig

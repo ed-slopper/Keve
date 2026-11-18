@@ -17,6 +17,7 @@ import blocks
 import brain
 import plant
 import room
+import game
 import journal
 import containers
 import teach
@@ -35,7 +36,8 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            teach.Watch, teach.LightUp, teach.Replay,
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
                                            blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest,
-                                           life.Ride, life.GetOut, life.Recover, life.Sleep, room.DigTo)})
+                                           life.Ride, life.GetOut, life.Recover, life.Sleep, room.DigTo,
+                                           game.BeatTheGame)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
                "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 
@@ -605,6 +607,10 @@ class Keve:
         last = self.ctrl.call("events --limit 1").get("last", 0)
         self.start_task("idle", {})  # stand by and fight back until the first order
         threading.Thread(target=self.watch_sneaks, daemon=True).start()
+        quest = getattr(self.args, "quest", None)
+        if quest:  # started for a job (training: 'Keve.bat --quest beat_game'), no one to ask
+            journal.log("note", f"starting quest {quest}")
+            self.start_task(quest, {})
         print(f"[keve] connected; {self.name} at {hello['player'].get('position')}")
         print(f"[keve] this session's log: {journal.path()}")
         journal.log("note", f"Keve joined at {hello['player'].get('position')}", owner=self.owner)

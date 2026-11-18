@@ -679,12 +679,24 @@ class Mine(Task):
             return True
         if any(u in name for u in UNBREAKABLE):
             return False
+        self.right_tool(name)
         self.ctx.body.call(f"look-at block {cell[0]} {cell[1]} {cell[2]}")
         r = self.ctx.body.call(f"break {cell[0]} {cell[1]} {cell[2]} --timeout 12")
         if r.get("error"):
             return False
         self.ctx.recent_breaks.append((cell[0], cell[1], cell[2], time.time()))
         return True
+
+    def right_tool(self, name):
+        """The tool that block wants in hand (a pickaxe for deepslate, a shovel for dirt),
+        not whatever he last held (a sword he just made takes forever on stone)."""
+        import blocks
+        import world_names
+        names = world_names.names()
+        tool = names.tool_for(name.split("[")[0])[0] if names else "pickaxe"
+        if tool in blocks.TOOLS and self.ctx.select_best(blocks.TOOLS[tool]):
+            return
+        self.ctx.select_best(PICKAXES)
 
     FALLING = ("gravel", "sand", "concrete_powder", "pointed_dripstone")
 
@@ -872,6 +884,31 @@ class Mine(Task):
             self.track["dir"] = list(self.dir)
         return ok
 
+    def stair_up(self):
+        """One step up: clear the two blocks ahead one higher (and headroom here), put a
+        block in if there's nothing to step onto, and step up."""
+        x, y, z = self.pos()
+        dx, dz = self.dir
+        self.face()
+        for c in ((x, y + 2, z), (x + dx, y + 1, z + dz), (x + dx, y + 2, z + dz)):
+            if not self.dig_through(c):
+                return False
+        bad = self.hazard_near([(x, y + 2, z), (x + dx, y + 2, z + dz)])
+        if bad and "lava" in bad:
+            self.plug([(x + dx, y + 2, z + dz), (x, y + 2, z)])
+            return False
+        step = (x + dx, y, z + dz)
+        if not is_solid(self.snap(step, 1).name(step)):
+            placed = False
+            for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack"):
+                if self.counts_of(item) and not self.ctx.place(step, item).get("error"):
+                    placed = True
+                    break
+            if not placed:
+                return False
+        self.ctx.body.call(f"goto {x + dx + 0.5:.2f} {y + 1:.2f} {z + dz + 0.5:.2f} --near 0.4 --timeout 3 --direct")
+        return self.pos()[1] >= y + 1
+
     def tunnel_step(self):
         """One block of 1x2 tunnel forward."""
         x, y, z = self.pos()
@@ -994,3 +1031,60 @@ class Mine(Task):
             ctx.body.call(f"goto {h[0]:.2f} {h[1]:.2f} {h[2]:.2f} --near 2 --sprint --timeout 15")
         if self.args.get("give") and got:
             Give(ctx, item=None, items=sorted(self.drop_names)).run_inner(self)
+
+
+def sky_light(ctx, pos):
+    x, y, z = (int(math.floor(v)) for v in pos)
+    r = ctx.senses.call(f"light {x} {y} {z} {x} {y + 1} {z}")
+    return max((int(c, 16) for c in r.get("sky", "") if c != "."), default=0)
+
+
+def underground(ctx):
+    p = ctx.eye_and_view()[3]
+    return sky_light(ctx, p) < 8
+
+
+def go_to_surface(ctx, task):
+    """Up into the daylight, like a player out of a mine: back up a staircase he knows if
+    one is right here, otherwise a staircase of his own straight up (blocks put under
+    any drop). True once the sky is overhead."""
+    if not underground(ctx):
+        return True
+    ctx.say("I'm underground, heading up to the surface first.")
+    m = Mine(ctx, ore="coal")
+    m.cancelled = task.cancelled
+    m.prov = Provision(ctx, m)
+    here = ctx.eye_and_view()[3]
+    for mine in m.known_mines():
+        path = [tuple(p) for p in mine.get("path", [])]
+        near = [n for n, p in enumerate(path) if math.dist(p, here) < 5]
+        if near:
+            for p in path[near[0]::-3]:  # back up the steps toward the top
+                if task.done():
+                    return False
+                ctx.body.call(f"goto {p[0] + 0.5:.2f} {p[1]:.2f} {p[2] + 0.5:.2f} --near 1.2 --timeout 6")
+            top = mine["top"]
+            ctx.walk_to(tuple(top), near=2, timeout=20, task=task)
+            if not underground(ctx):
+                return True
+            break
+    p = ctx.state()["player"]
+    m.dir = DIRS[round(((p["yaw"] % 360) / 90)) % 4]
+    import journal
+    for n in range(140):
+        if task.done():
+            return False
+        if not underground(ctx):
+            ctx.say("daylight!")
+            return True
+        if n % 10 == 0:
+            journal.log("note", "climbing to the surface", y=m.pos()[1])
+        if m.prov.pick_tier() < 0 and not m.new_pickaxe_down_here():
+            ctx.say("my pickaxe broke and I can't make another down here. I'm stuck!")
+            journal.log("quest", "stuck underground: no pickaxe and nothing to make one")
+            return False
+        if not m.stair_up():
+            m.turn()
+        if m.guard(owner_radius=0.0, self_radius=4.0):
+            continue
+    return not underground(ctx)

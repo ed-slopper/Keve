@@ -66,7 +66,12 @@ class Ctx:
     def __init__(self, body, senses, say, owner_name, self_name):
         self.body = body          # action connection (task thread)
         self.senses = senses      # raw reads, only through sight helpers below
-        self.say = say            # send a chat line
+        self.said_log = []        # what Keve said lately (a quest reads it to see why a stage failed)
+
+        def say_and_note(text, _say=say):
+            self.said_log = (self.said_log + [text])[-60:]
+            return _say(text)
+        self.say = say_and_note   # send a chat line
         self.owner_name = owner_name
         self.self_name = self_name
         self.memory = {}          # (x, y, z) -> (block name, time seen); filled only by sight
@@ -982,6 +987,11 @@ class Gather(Task):
                 targets = self.easy_trunks(targets, block_ok, pos)
             if not targets:
                 if not ctx.look_around(block_ok):
+                    if what in ("wood", "sand", "dirt", "sugar_cane", "pumpkin", "melon") and explores == 0                             and not getattr(self, "_went_up", False):
+                        import mining
+                        self._went_up = True
+                        if mining.underground(ctx) and mining.go_to_surface(ctx, self):
+                            continue  # look again up here
                     if explores >= self.args.get("max_explores", 6):
                         if not self.args.get("quiet_fail"):
                             ctx.say(f"I can't find any {shown} I can see around here.")
