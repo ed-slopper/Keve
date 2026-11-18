@@ -201,8 +201,18 @@ class Crafter:
         finally:
             self.ctx.body.call("close")
             # The table stays out while there's crafting to do; Keve packs it up once he's
-            # been idle a while (skills.Idle), like a player would.
+            # been idle a while (skills.Idle), like a player would. Underground it comes
+            # straight back with him (he'd walk off and leave it, then have none down there).
             self.ctx.last_craft_time = time.time()
+            if size == 3:
+                try:
+                    import mining
+                    if mining.underground(self.ctx) and not self.count("crafting_table"):
+                        self.pick_up_station(table)
+                        if tuple(table) in self.ctx.placed_stations:
+                            self.ctx.placed_stations.remove(tuple(table))
+                except Exception:
+                    pass
 
     def _fill(self, pattern, grid):
         """Put one ingredient in each cell of the pattern."""
