@@ -792,7 +792,8 @@ class Mine(Task):
         self.right_tool(name)
         self.ctx.body.call(f"look-at block {cell[0]} {cell[1]} {cell[2]}")
         t0 = time.time()
-        r = self.ctx.body.call(f"break {cell[0]} {cell[1]} {cell[2]} --timeout 12")
+        bare = self.prov.pick_tier() < 0 if getattr(self, "prov", None) else False
+        r = self.ctx.body.call(f"break {cell[0]} {cell[1]} {cell[2]} --timeout {35 if bare else 12}")
         if getattr(self, "_times", None) is not None:
             self._times["breaks"] = self._times.get("breaks", 0.0) + time.time() - t0
             self._times["n_breaks"] = self._times.get("n_breaks", 0) + 1
@@ -1299,9 +1300,10 @@ def go_to_surface(ctx, task):
             ctx.say("too hurt to keep climbing, and I can't heal. help!")
             return False
         if m.prov.pick_tier() < 0 and not m.new_pickaxe_down_here():
-            ctx.say("my pickaxe broke and I can't make another down here. I'm stuck!")
-            journal.log("quest", "stuck underground: no pickaxe and nothing to make one")
-            return False
+            if not getattr(m, "_told_bare", False):
+                ctx.say("no pickaxe and nothing to make one: digging up by hand. this'll take a while!")
+                journal.log("quest", "climbing out with bare hands")
+                m._told_bare = True
         if not m.stair_up():
             m.turn()
         if m.guard(owner_radius=0.0, self_radius=4.0):
