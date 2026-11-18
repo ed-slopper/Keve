@@ -547,6 +547,8 @@ def main():
                    help="don't run your words through the chat model first (Kev and the rules only)")
     p.add_argument("--skip-nights", action="store_true",
                    help="training: when night falls on a quest, set the time to day (a cheat) instead of hiding")
+    p.add_argument("--keep-inventory", action="store_true",
+                   help="training: turn on the keepInventory game rule, so a death doesn't cost the quest's gear")
     p.add_argument("--quest", help="start Keve on a job right away with no one to ask (training), e.g. beat_game")
     p.add_argument("--no-cheats", action="store_true",
                    help="don't make you an operator on Keve's server (no /gamemode, /give...)")
@@ -602,6 +604,10 @@ def main():
     server_proc = ensure_server(srv, server_port, skin)
     if skin:
         ensure_proxy(args.port, owner, owner_uuid)
+    if args.keep_inventory:
+        subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd", "gamerule keep_inventory true"],
+                       capture_output=True, creationflags=NO_WINDOW)
+        print("Training: keepInventory is on (deaths don't drop items). /gamerule keep_inventory false undoes it.")
     if not args.no_cheats and owner:
         # Your own world: you're an operator (cheats on: /gamemode, /give, /tp...).
         r = subprocess.run([str(srv), "--dir", str(SERVER_DIR), "cmd", f"op {owner}"],
