@@ -484,6 +484,16 @@ class Mine(Task):
         if not self.reuse_staircase(best_y) or self.track is None:
             self.track = {"top": list(ctx.state()["player"]["position"]), "path": [], "dir": list(self.dir)}
         # 2. Staircase down to the ore's level (taking ores seen on the way).
+        # Well below the ore's level (iron's at y 16; at y -54 there's next to none): up to it.
+        if ctx.state()["player"]["block_pos"][1] < best_y - 10:
+            ctx.say(f"too deep for {ore}, climbing up to y {best_y}.")
+            for _ in range(200):
+                if self.finished() or ctx.state()["player"]["block_pos"][1] >= best_y - 2:
+                    break
+                if not self.stair_up():
+                    self.turn()
+                else:
+                    self.after_step()
         blocked = 0
         moves = 0
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
