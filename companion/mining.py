@@ -856,6 +856,8 @@ class Mine(Task):
 
     def stair_step(self):
         """One step down the staircase. False when this direction is blocked."""
+        if self.ctx.survive():  # out of air (water got in), on fire...: that first
+            return False
         x, y, z = self.pos()
         dx, dz = self.dir
         if self.heading_into_danger((x, y, z), (x + dx * 3, y - 3, z + dz * 3)):
@@ -889,6 +891,8 @@ class Mine(Task):
     def stair_up(self):
         """One step up: clear the two blocks ahead one higher (and headroom here), put a
         block in if there's nothing to step onto, and step up."""
+        if self.ctx.survive():
+            return False
         x, y, z = self.pos()
         dx, dz = self.dir
         self.face()
@@ -915,6 +919,8 @@ class Mine(Task):
 
     def tunnel_step(self):
         """One block of 1x2 tunnel forward."""
+        if self.ctx.survive():
+            return False
         x, y, z = self.pos()
         dx, dz = self.dir
         front = [(x + dx, y + 1, z + dz), (x + dx, y, z + dz)]

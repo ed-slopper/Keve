@@ -252,6 +252,62 @@ class Ctx:
     def protected(self, p):
         return any(abs(p[0] - z[0]) <= 18 and abs(p[2] - z[2]) <= 18 for z in getattr(self, "zones", []))
 
+    def escape_water(self, p):
+        """Out of air: swim to the nearest dry spot (air for the head, ideally higher up);
+        nowhere dry close by, dig up through the block over his head while swimming.
+        (Just holding jump drowned him in a flooded 1-wide staircase.)"""
+        x, y, z = p["block_pos"]
+        snap = sight.Snapshot.read(self.senses, (x, y, z), rh=4, rv=4)
+
+        def dry(c):
+            a, b = snap.name(c), snap.name((c[0], c[1] + 1, c[2]))
+            return not sight.blocks_body(a) and not sight.is_fluid(a) and not sight.blocks_body(b)                 and not sight.is_fluid(b)
+        spots = [(x + dx, y + dy, z + dz) for dx in range(-4, 5) for dy in range(-1, 5) for dz in range(-4, 5)
+                 if dry((x + dx, y + dy, z + dz))]
+        self.body.call("key space down")
+        try:
+            if spots:
+                c = min(spots, key=lambda c: math.dist(c, (x, y, z)) - 0.5 * (c[1] - y))
+                self.body.call(f"goto {c[0] + 0.5:.2f} {c[1]:.2f} {c[2] + 0.5:.2f} --near 0.6 --timeout 4 --direct")
+            else:
+                for dy in (2, 3):
+                    c = (x, y + dy, z)
+                    if sight.blocks_body(snap.name(c)):
+                        self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                        self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 6")
+                self.body.call("wait 15")
+        finally:
+            self.body.call("key space up")
+
+    def hide(self, task):
+        """Two blocks down, a block over the head, eat, and wait to heal (or for the mobs to
+        go); then out again. On the surface or in a tunnel alike."""
+        self.say("ouch, I'm hurt! hiding to heal up.")
+        x, y, z = self.state()["player"]["block_pos"]
+        for c in ((x, y - 1, z), (x, y - 2, z)):
+            n = self.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
+            if n and sight.blocks_body(n[0][3]) and not any(u in n[0][3] for u in ("bedrock", "lava", "water")):
+                import mining
+                self.select_best(PICKAXES + ["netherite_shovel", "diamond_shovel", "iron_shovel", "stone_shovel", "wooden_shovel"])
+                self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
+        self.body.call(f"goto {x + 0.5:.2f} {y - 2:.2f} {z + 0.5:.2f} --near 0.4 --timeout 2 --direct")
+        nx, ny, nz = self.state()["player"]["block_pos"]
+        for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack"):
+            if self.counts().get("minecraft:" + item):
+                self.place((nx, ny + 2, nz), "minecraft:" + item)
+                break
+        end = time.time() + 90
+        while time.time() < end and not task.done():
+            self.maybe_eat(below=19)
+            hp = self.state()["player"].get("health", 20)
+            if hp >= 16:
+                break
+            time.sleep(2)
+        if not task.done():
+            self.say("patched up!")
+            self.climb_out(task)
+
     def in_hole(self):
         """Walls all round at head height (a pit, the night shelter, a 1-wide shaft)."""
         x, y, z = self.state()["player"]["block_pos"]
@@ -481,10 +537,8 @@ class Ctx:
             p = self.state()["player"]
         except Exception:
             return False
-        if p.get("air", 300) < 120:
-            self.body.call("key space down")
-            self.body.call("wait 15")
-            self.body.call("key space up")
+        if p.get("air", 300) < 160:
+            self.escape_water(p)
             return True
         x, y, z = p["block_pos"]
         r = self.senses.call(f"blocks {x} {y - 1} {z} {x} {y + 1} {z}")
@@ -559,13 +613,18 @@ class Ctx:
         """Off the canopy's edge: the nearest open spot beside the tree at foot level (air
         to walk into), walked to straight. A fall, but out of the tree."""
         x, y, z = p["block_pos"]
-        box = self.senses.call(f"blocks {x - 4} {y - 1} {z - 4} {x + 4} {y + 1} {z + 4}").get("blocks", [])
+        box = self.senses.call(f"blocks {x - 4} {y - 6} {z - 4} {x + 4} {y + 1} {z + 4}").get("blocks", [])
         filled = {(b[0], b[1], b[2]) for b in box if sight.blocks_body(b[3]) or tree(b[3])}
+        ground = {(b[0], b[1], b[2]) for b in box if sight.blocks_body(b[3]) and not tree(b[3])
+                  and "dripstone" not in b[3]}
         best = None
         for dx in range(-4, 5):
             for dz in range(-4, 5):
                 c = (x + dx, y, z + dz)
                 if (dx, dz) == (0, 0) or c in filled or (c[0], y + 1, c[2]) in filled                         or (c[0], y - 1, c[2]) in filled:
+                    continue
+                # Only where there's ground (not more leaves, not a cliff) within 4 below.
+                if not any((c[0], y - k, c[2]) in ground for k in range(1, 6)):
                     continue
                 d = math.hypot(dx, dz)
                 if best is None or d < best[0]:
@@ -645,6 +704,18 @@ class Task:
                            if m.get("type", "").removeprefix("minecraft:") in RANGED]
         if not targets:
             return False
+        try:
+            hp = ctx.state()["player"].get("health", 20)
+        except Exception:
+            hp = 20
+        if hp <= 8 and not getattr(self, "_hiding", False):
+            # Losing: don't slug it out. Dig in and heal, like a player would.
+            self._hiding = True
+            try:
+                ctx.hide(self)
+            finally:
+                self._hiding = False
+            return True
         m = min(targets, key=lambda m: m["distance"])
         if not getattr(self, "_announced", False):
             ctx.say(random.choice(["got one!", "behind you!", "I see it!", "on it!"]))

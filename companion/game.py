@@ -139,6 +139,20 @@ class BeatTheGame(Task):
         from skills import Hunt
         ctx = self.ctx
         heading = random.uniform(0, 2 * math.pi)
+        # Somewhere he found animals before: go there first.
+        herds = life.load_memory().get("herds", [])
+        if herds and not self.done():
+            here = ctx.eye_and_view()[3]
+            spot = min(herds, key=lambda h: math.dist((h[0], h[2]), (here[0], here[2])))
+            if math.dist((spot[0], spot[2]), (here[0], here[2])) > 24:
+                ctx.say(f"I found animals around {spot[0]:.0f} {spot[2]:.0f} before, heading there!")
+                journal.log("quest", "food: going to a herd I know", to=spot)
+                for _ in range(5):  # travel goes ~120 blocks a go: far ones take a few
+                    here = ctx.eye_and_view()[3]
+                    if self.done() or math.dist((spot[0], spot[2]), (here[0], here[2])) < 20:
+                        break
+                    if self.travel(spot[0], spot[2], step=12) < 3:
+                        break  # not getting anywhere
         for trip in range(6):
             if self.done() or have(ctx, *FOOD, *RAW_MEAT, n=10):
                 break
@@ -153,6 +167,7 @@ class BeatTheGame(Task):
                 if near:
                     t = min(near, key=lambda e: e["distance"])["pos"]
                     ctx.walk_to(tuple(t), near=4, timeout=20, task=self)
+                    self.remember_herd(t)
                 self.sub(Hunt, mob=kind, count=4)
             if have(ctx, *FOOD, *RAW_MEAT, n=10):
                 break
@@ -170,7 +185,7 @@ class BeatTheGame(Task):
             t = self.ctx.body.call("status").get("day_time", 6000) % 24000
         except Exception:
             return False
-        return 12800 <= t <= 23200
+        return 12000 <= t <= 23300  # from dusk: skeletons are out in the shade before full dark
 
     def shelter(self):
         """Dark out and he's on the surface: two blocks down, a block over his head, wait
@@ -264,7 +279,7 @@ class BeatTheGame(Task):
                 if sight.blocks_body(name) or sight.is_fluid(name):
                     floor = (y, name)
                     break
-            if floor is None or y0 - floor[0] > 3 or "leaves" in floor[1]:
+            if floor is None or y0 - floor[0] > 3 or "leaves" in floor[1] or "dripstone" in floor[1]                     or "lava" in floor[1] or "magma" in floor[1]:
                 return False
         return True
 
@@ -282,6 +297,12 @@ class BeatTheGame(Task):
             if self.done() or not m.stair_up():
                 break
 
+    def remember_herd(self, pos):
+        mem = life.load_memory()
+        herds = [h for h in mem.get("herds", []) if ((h[0] - pos[0]) ** 2 + (h[2] - pos[2]) ** 2) ** 0.5 > 30]
+        mem["herds"] = (herds + [[round(pos[0]), round(pos[1]), round(pos[2])]])[-12:]
+        life.save_memory(mem)
+
     def cook(self):
         import craft
         import mining
@@ -297,9 +318,11 @@ class BeatTheGame(Task):
             except (craft.NeedMore, RuntimeError) as e:
                 if getattr(e, "what", "") == "fuel":
                     prov.get_raw("log", max(3, raw // 4), 0)
-                    prov.crafter.smelt(meat, raw)
-                else:
-                    raise
+                    try:
+                        prov.crafter.smelt(meat, min(raw, self.ctx.counts().get("minecraft:" + meat, 0)))
+                    except (craft.NeedMore, RuntimeError):
+                        pass
+                # else: the meat's gone (he died, or ate it): nothing to cook
 
     IRON = 17  # pickaxe 3, sword 2, bucket 3, chestplate 8, flint and steel 1
 
