@@ -845,6 +845,13 @@ class Task:
                     if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:") in HOSTILE | NEUTRAL]
             if near:
                 targets = [min(near, key=lambda e: e["distance"])]
+        if not targets:
+            # A creeper creeping up (behind him, round the tunnel bend): a player hears the
+            # hiss and turns on it. Unseen, one blew him up at y 7 for 19 hearts' worth.
+            hiss = [e for e in ctx.senses.call("entities 7 minecraft:creeper").get("entities", [])
+                    if e.get("distance", 99) < 7]
+            if hiss:
+                targets = [min(hiss, key=lambda e: e["distance"])]
         if not targets and time.time() - getattr(ctx, "shot_at", 0) < 5:
             # Shot at: the archer is further off. Go get it (if he's not too hurt for it).
             try:
