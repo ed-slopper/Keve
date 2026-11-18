@@ -442,7 +442,10 @@ class Mine(Task):
         self.prov = Provision(ctx, self)
         self.wanted = {ore, "coal"}  # coal on the way too: torches for the dark
         # A big order gets longer down there (17 iron is more than 20 minutes' digging).
-        self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want) * 60
+        # Time down there: by the ore count, and by the depth (a staircase step a minute
+        # is slow but real, and the bottom still needs branch mining time).
+        depth = max(0, ctx.state()["player"]["block_pos"][1] - best_y)
+        self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want, depth // 3 + 20) * 60
         self.drop_names = {"minecraft:" + d for d in drops}
         ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
         self.start_have = self.have()
@@ -473,12 +476,29 @@ class Mine(Task):
             self.track = {"top": list(ctx.state()["player"]["position"]), "path": [], "dir": list(self.dir)}
         # 2. Staircase down to the ore's level (taking ores seen on the way).
         blocked = 0
+        moves = 0
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
             if not self.stair_step():
                 blocked += 1
-                if blocked >= 8:  # every way down from here is blocked or dangerous
-                    ctx.say("I can't find a safe way down from here. let's try somewhere else!")
-                    break
+                if blocked >= 8:  # every way down from here is blocked (water all round...)
+                    if moves >= 3:
+                        ctx.say("I can't find a safe way down anywhere round here.")
+                        break
+                    # Like a player: tunnel over a dozen blocks and start down again there.
+                    moves += 1
+                    ctx.say("water all round here, moving over to dig down somewhere else.")
+                    self.turn()
+                    went = 0
+                    for _ in range(24):
+                        if went >= 12 or self.done():
+                            break
+                        if self.tunnel_step():
+                            went += 1
+                            self.after_step()
+                        else:
+                            self.turn()
+                    blocked = 0
+                    continue
                 if not self.turn():
                     break
                 continue
@@ -748,6 +768,14 @@ class Mine(Task):
             p = tuple(p)
             tunnel |= {p, (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])}
         tunnel |= self.dug or set()
+        # Cheap first look: any open neighbour at all? Nearly every step has none, and the
+        # big look below (a 17-block cube and its light) was most of a staircase step's time.
+        near = self.snap(opened[0], 2)
+        sides = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+        neighbours = {(c[0] + d[0], c[1] + d[1], c[2] + d[2]) for c in opened for d in sides} - tunnel
+        if not any(not is_solid(near.name(n)) and not sight.is_fluid(near.name(n)) and "torch" not in near.name(n)
+                   for n in neighbours):
+            return True
         snap = self.snap(opened[0], 8)
         # Open air the sky reaches is just outside (the top of the stairs), not a cave.
         R = 8

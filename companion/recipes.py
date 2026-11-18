@@ -19,6 +19,9 @@ GROUP_TAGS = {
     "minecraft:stone_tool_materials": "cobble", "minecraft:stone_crafting_materials": "cobble",
     "minecraft:coals": "coal",
     "minecraft:wooden_tool_materials": "planks",
+    "minecraft:iron_tool_materials": "iron_ingot",
+    "minecraft:diamond_tool_materials": "diamond",
+    "minecraft:gold_tool_materials": "gold_ingot",
 }
 # Mined, smelted or farmed, never crafted by Keve (the game has 'iron ingot from nuggets'
 # and 'nuggets from an ingot', which would go round in circles).
