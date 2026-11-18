@@ -200,14 +200,13 @@ class BeatTheGame(Task):
         m.cancelled = self.cancelled
         m.prov = mining.Provision(ctx, m)
         x, y, z = m.pos()
-        for c in ((x, y - 1, z), (x, y - 2, z)):
+        # Three down: the lid then sits in the ground layer, with dirt round it to hold it
+        # (two down, it'd float in the air at surface height and can't be placed).
+        for c in ((x, y - 1, z), (x, y - 2, z), (x, y - 3, z)):
             m.dig_through(c)
-        ctx.body.call(f"goto {x + 0.5:.2f} {y - 2:.2f} {z + 0.5:.2f} --near 0.4 --timeout 3 --direct")
-        x, y, z = m.pos()
-        roof = (x, y + 2, z)
-        for item in ("cobblestone", "cobbled_deepslate", "dirt"):
-            if m.counts_of(item) and not ctx.place(roof, item).get("error"):
-                break
+        ctx.body.call(f"goto {x + 0.5:.2f} {y - 3:.2f} {z + 0.5:.2f} --near 0.4 --timeout 3 --direct")
+        if not ctx.roof_over():
+            journal.log("quest", "night: couldn't cover the shelter")
         end = time.time() + 12 * 60
         while self.night() and time.time() < end and not self.done():
             if self.guard(owner_radius=0.0, self_radius=3.0):

@@ -284,19 +284,16 @@ class Ctx:
         go); then out again. On the surface or in a tunnel alike."""
         self.say("ouch, I'm hurt! hiding to heal up.")
         x, y, z = self.state()["player"]["block_pos"]
-        for c in ((x, y - 1, z), (x, y - 2, z)):
+        for c in ((x, y - 1, z), (x, y - 2, z), (x, y - 3, z)):  # three: the lid needs ground round it
             n = self.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
             if n and sight.blocks_body(n[0][3]) and not any(u in n[0][3] for u in ("bedrock", "lava", "water")):
                 import mining
                 self.select_best(PICKAXES + ["netherite_shovel", "diamond_shovel", "iron_shovel", "stone_shovel", "wooden_shovel"])
                 self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
                 self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
-        self.body.call(f"goto {x + 0.5:.2f} {y - 2:.2f} {z + 0.5:.2f} --near 0.4 --timeout 2 --direct")
-        nx, ny, nz = self.state()["player"]["block_pos"]
-        for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack"):
-            if self.counts().get("minecraft:" + item):
-                self.place((nx, ny + 2, nz), "minecraft:" + item)
-                break
+        self.body.call(f"goto {x + 0.5:.2f} {y - 3:.2f} {z + 0.5:.2f} --near 0.4 --timeout 2 --direct")
+        if not self.roof_over():
+            self.say("nothing to cover the hole with!")
         end = time.time() + 90
         while time.time() < end and not task.done():
             self.maybe_eat(below=19)
@@ -308,10 +305,28 @@ class Ctx:
             self.say("patched up!")
             self.climb_out(task)
 
-    def in_hole(self):
-        """Walls all round at head height (a pit, the night shelter, a 1-wide shaft)."""
+    def roof_over(self):
+        """A block over his head (the hole's lid). The dirt he just dug out lands with him:
+        pick it up first if he has nothing else. True when the lid is really there."""
+        time.sleep(0.8)
+        self.collect(2)
         x, y, z = self.state()["player"]["block_pos"]
-        r = self.senses.call(f"blocks {x - 1} {y + 1} {z - 1} {x + 1} {y + 1} {z + 1}").get("blocks", [])
+        lid = (x, y + 2, z)
+        for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack", "andesite", "diorite", "granite",
+                     "sand", "gravel", "oak_planks"):
+            if not self.counts().get("minecraft:" + item):
+                continue
+            self.place(lid, "minecraft:" + item)
+            r = self.senses.call(f"blocks {lid[0]} {lid[1]} {lid[2]} {lid[0]} {lid[1]} {lid[2]}").get("blocks", [])
+            if r and sight.blocks_body(r[0][3]):
+                return True
+        return False
+
+    def in_hole(self):
+        """In a pit: ground at foot height on all four sides (the night shelter, a hole he dug,
+        a 1-wide shaft), so walking won't get him out."""
+        x, y, z = self.state()["player"]["block_pos"]
+        r = self.senses.call(f"blocks {x - 1} {y} {z - 1} {x + 1} {y} {z + 1}").get("blocks", [])
         walls = {(b[0], b[2]) for b in r if sight.blocks_body(b[3])}
         return all((x + dx, z + dz) in walls for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)))
 
