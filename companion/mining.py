@@ -382,6 +382,7 @@ class Mine(Task):
             ctx.say("couldn't get to the old stairs, I'll dig new ones here.")
             return False
         path = [tuple(p) for p in m.get("path", [])]
+        self.reused = True
         self.track = {"top": list(m["top"]), "path": [list(p) for p in path], "dir": m.get("dir")}
         if m.get("dir"):
             self.dir = tuple(m["dir"])
@@ -527,7 +528,19 @@ class Mine(Task):
                 continue
             blocked = 0
             self.after_step()
-        # 3. Branch mine at that level.
+        # 3. Branch mine at that level. Down an old staircase, the rock round it has been
+        # mined before (his old tunnels, the ore gone): out to fresh rock first.
+        if getattr(self, "reused", False):
+            ctx.say("this spot's been mined out before, heading out to fresh rock.")
+            went = 0
+            for _ in range(48):
+                if went >= 24 or self.finished():
+                    break
+                if self.tunnel_step():
+                    went += 1
+                    self.after_step()
+                else:
+                    self.turn()
         leg, legs = 0, 0
         while not self.finished():
             if tier >= 2 and self.prov.pick_tier() < 2 and self.counts_of("raw_iron") >= 3:
