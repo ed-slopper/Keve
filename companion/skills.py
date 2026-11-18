@@ -224,6 +224,42 @@ class Ctx:
                 self.body.call(f"click-slot {empty}")
         self.body.call("close")
 
+    def junk_pit(self):
+        """Where to throw junk so he doesn't walk over it and pick it straight back up (in a
+        1-wide tunnel it lands at his feet): a pocket dug two blocks into the side wall,
+        looked into. Returns the pocket's mouth (to seal after), or None on open ground,
+        where he just throws it ahead."""
+        p = self.state()["player"]
+        x, y, z = p["block_pos"]
+        yaw = math.radians(p["yaw"])
+        fx, fz = -math.sin(yaw), math.cos(yaw)
+        sides = [(round(fz), round(-fx)), (round(-fz), round(fx))]  # left and right of facing
+        r = self.senses.call(f"blocks {x - 3} {y} {z - 3} {x + 3} {y} {z + 3}").get("blocks", [])
+        solid = {(b[0], b[1], b[2]) for b in r if sight.blocks_body(b[3])}
+        open_round = sum(1 for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)) if (x + dx, y, z + dz) not in solid)
+        if open_round >= 3:
+            self.body.call(f"look {p['yaw']:.0f} 10")  # open ground: just throw it ahead
+            return None
+        for sx, sz in sides:
+            a, b = (x + sx, y, z + sz), (x + 3 * sx, y, z + 3 * sz)
+            mid = (x + 2 * sx, y, z + 2 * sz)
+            if a not in solid or mid not in solid or b not in solid:
+                continue
+            self.select_best(PICKAXES)
+            for c in (a, mid, b):
+                self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
+            self.body.call(f"look-at {b[0] + 0.5:.2f} {y + 0.3:.2f} {b[2] + 0.5:.2f}")
+            return a
+        self.body.call(f"look {p['yaw'] + 180:.0f} -20")
+        return None
+
+    def seal_pit(self, mouth):
+        for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack"):
+            if self.counts().get("minecraft:" + item):
+                self.place(mouth, "minecraft:" + item)
+                return
+
     def drop_junk(self, keep_cobble=64):
         """When the inventory is getting full, throw out what isn't worth carrying (see
         KEEP_WORDS): each junk stack is put in the last hotbar slot and thrown with Q, like a
@@ -234,8 +270,7 @@ class Ctx:
         if len(slots) < 30:
             return
         self.body.call("close")  # a furnace or chest left open would take the clicks
-        yaw = self.state()["player"]["yaw"]
-        self.body.call(f"look {yaw + 180:.0f} -30")  # throw it up and behind, back up the tunnel
+        pit = self.junk_pit()
         cobble = 0
         junk = []
         for s in slots:
@@ -247,23 +282,45 @@ class Ctx:
             elif any(k in it for k in self.KEEP_WORDS):
                 continue
             junk.append(s)
+        thrown = []
+        p = self.state()["player"]
+        if not pit:
+            self.body.call(f"look {p['yaw']:.0f} -15")  # throw it well ahead
         for s in junk:
-            # One stack at a time: open, let it open, pick the stack up, check it's the junk,
-            # close (closing with a stack held throws it). Anything else picked up by a
-            # click gone wrong is put back, never thrown (swapping stacks round the hotbar
-            # lost him a shield, a bucket and a pickaxe).
-            self.body.call("open-inventory")
-            time.sleep(0.35)  # let the screen open ('wait' returns at once here)
-            self.body.call(f"click-slot {s['slot']}")
-            carried = (self.body.call("inventory").get("carried") or {}).get("item", "")
-            if carried != s["item"]:
+            # To the hotbar (shift-click moves a pack stack there), then thrown with Q (it goes
+            # further than one dropped out of the screen), stepping back from where it
+            # lands so he doesn't pick it straight back up.
+            if s["slot"] > 8:
+                self.body.call("open-inventory")
+                time.sleep(0.35)
+                self.body.call(f"click-slot {s['slot']} shift")
                 self.safe_close()
-                continue
-            self.body.call("close")
+                time.sleep(0.1)
+            r = self.body.call(f"select {s['item']}")
+            if r.get("error"):
+                # Hotbar full: out of the screen instead (pick it up, close: it's thrown).
+                slot = self.slot_of(s["item"])
+                if slot is None:
+                    continue
+                self.body.call("open-inventory")
+                time.sleep(0.35)
+                self.body.call(f"click-slot {slot}")
+                if (self.body.call("inventory").get("carried") or {}).get("item") != s["item"]:
+                    self.safe_close()
+                    continue
+                self.body.call("close")
+            else:
+                self.body.call("drop all")
+            thrown.append(s["item"][10:])
+            if not pit:
+                self.body.call("move back 0.25")
+        if pit:
+            time.sleep(0.3)
+            self.seal_pit(pit)
         now = self.body.call("inventory")
         after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
         import journal
-        journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}")
+        journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}", pit=bool(pit), thrown=thrown[:8])
 
     # --- ground where breaking doesn't stick (spawn protection, a claim) --------------
     def block_came_back(self, p, ok):
