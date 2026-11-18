@@ -480,13 +480,15 @@ class Mine(Task):
         while not self.finished() and ctx.state()["player"]["block_pos"][1] > best_y:
             if not self.stair_step():
                 blocked += 1
+                import journal
+                journal.log("note", "stair step failed", why=getattr(self, "why", "?"))
                 if blocked >= 8:  # every way down from here is blocked (water all round...)
                     if moves >= 3:
                         ctx.say("I can't find a safe way down anywhere round here.")
                         break
                     # Like a player: tunnel over a dozen blocks and start down again there.
                     moves += 1
-                    ctx.say("water all round here, moving over to dig down somewhere else.")
+                    ctx.say("I can't get down from here, moving over to dig down somewhere else.")
                     self.turn()
                     went = 0
                     for _ in range(24):
@@ -700,6 +702,11 @@ class Mine(Task):
         """Break one block if it's there; False if it's unbreakable or the dig failed."""
         s = self.snap(cell, 1)
         name = s.name(cell)
+        if sight.is_fluid(name) and "water" in name:
+            # Water where he wants to dig: put a block in it (that displaces the water),
+            # then mine the block, like a player clearing a flooded passage.
+            self.plug([cell])
+            name = self.snap(cell, 1).name(cell)
         if sight.is_fluid(name) or base(name) in ("minecraft:fire", "minecraft:soul_fire"):
             return False
         if not is_solid(name):
@@ -708,7 +715,13 @@ class Mine(Task):
             return False
         self.right_tool(name)
         self.ctx.body.call(f"look-at block {cell[0]} {cell[1]} {cell[2]}")
+        t0 = time.time()
         r = self.ctx.body.call(f"break {cell[0]} {cell[1]} {cell[2]} --timeout 12")
+        if getattr(self, "_times", None) is not None:
+            self._times["breaks"] = self._times.get("breaks", 0.0) + time.time() - t0
+            self._times["n_breaks"] = self._times.get("n_breaks", 0) + 1
+            if r.get("error"):
+                self._times["break_errors"] = self._times.get("break_errors", 0) + 1
         if r.get("error"):
             return False
         self.ctx.recent_breaks.append((cell[0], cell[1], cell[2], time.time()))
@@ -753,6 +766,26 @@ class Mine(Task):
             if min(math.dist(pos, c) for c in cells) <= 2.0 and snap.block_visible(eye, pos):
                 return name
         return None
+
+    def block_water(self, cells):
+        """Water next to what he just dug: fill it in with cobblestone, like a player
+        damming a leak, so the dig can go on through a wet layer (y 0 and below is full of
+        it). True when no water touches the dug blocks any more. Lava isn't dammed: too
+        dangerous to stand next to while placing."""
+        sides = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+        for _ in range(3):
+            snap = self.snap(cells[0], 3)
+            wet = {(c[0] + d[0], c[1] + d[1], c[2] + d[2]) for c in cells for d in sides}
+            wet = [w for w in wet if w not in cells and sight.is_fluid(snap.name(w))]
+            if any("lava" in snap.name(w) for w in wet):
+                return False
+            if not wet:
+                return True
+            if not (self.counts_of("cobblestone") or self.counts_of("cobbled_deepslate") or self.counts_of("dirt")):
+                return False
+            self.plug(sorted(wet, key=lambda w: -w[1]))  # from the top: water runs down
+            time.sleep(0.3)
+        return False
 
     # --- caves: where the mobs come from --------------------------------------------
     def seal_cave(self, opened, at, enter=False):
@@ -903,7 +936,10 @@ class Mine(Task):
         """Step into a cell whose floor has been checked. Never a blind step: if the
         walk doesn't arrive, stay put (and if Keve ends up lower than planned, stop)."""
         x, y, z = cell
+        t0 = time.time()
         self.ctx.body.call(f"goto {x + 0.5:.2f} {y:.2f} {z + 0.5:.2f} --near 0.4 --timeout 3 --direct")
+        if getattr(self, "_times", None) is not None:
+            self._times["walk"] = self._times.get("walk", 0.0) + time.time() - t0
         now = self.pos()
         if now[1] < y - 1:
             self.fell = True
@@ -914,6 +950,7 @@ class Mine(Task):
     def stair_step(self):
         """One step down the staircase. False when this direction is blocked."""
         if self.ctx.survive():  # out of air (water got in), on fire...: that first
+            self.why = "had to deal with air/fire/a tree first"
             return False
         x, y, z = self.pos()
         dx, dz = self.dir
@@ -921,25 +958,34 @@ class Mine(Task):
             if not getattr(self, "_told_danger", False):
                 self.ctx.say("that way's where I got hurt before, going another way.")
                 self._told_danger = True
+            self.why = "toward a danger spot"
             return False
         front = [(x + dx, y + 1, z + dz), (x + dx, y, z + dz), (x + dx, y - 1, z + dz)]
         self.face()
         for c in front:
             if not self.dig_through(c):
+                self.why = f"couldn't dig {c}: {self.snap(c, 1).name(c)}"
                 return False
         bad = self.hazard_near(front)
+        if bad and "water" in bad and self.block_water(front):
+            bad = None  # dammed it: on through
         if bad:
             self.ctx.say(f"{base(bad).removeprefix('minecraft:')} ahead, going around it.")
             self.plug(front[::-1])
+            self.why = f"{bad} ahead"
             return False
         if not self.seal_cave(front, (x, y, z)):
+            self.why = "big cave"
             return False  # a big cave that way: boarded up, the stairs go another way
         floor = (x + dx, y - 2, z + dz)
         if not is_solid(self.snap(floor, 1).name(floor)):
             self.ctx.say("there's a drop here, going another way.")
             self.plug([front[2]])
+            self.why = "drop"
             return False
         ok = self.walk_to((x + dx, y - 1, z + dz))
+        if not ok:
+            self.why = f"walk onto the step failed (at {self.pos()}, wanted {(x + dx, y - 1, z + dz)})"
         if ok and getattr(self, "track", None) is not None:
             self.track["path"].append([x + dx, y - 1, z + dz])
             self.track["dir"] = list(self.dir)
@@ -986,6 +1032,8 @@ class Mine(Task):
             if not self.dig_through(c):
                 return False
         bad = self.hazard_near(front)
+        if bad and "water" in bad and self.block_water(front):
+            bad = None
         if bad:
             self.ctx.say(f"{base(bad).removeprefix('minecraft:')}! turning back.")
             self.plug(front[::-1])
@@ -1001,23 +1049,48 @@ class Mine(Task):
         return self.walk_to((x + dx, y, z + dz))
 
     def after_step(self):
-        """Look around the new spot, take the ores in sight, eat, fight, light the way."""
+        """Look around the new spot, take the ores in sight, eat, fight, light the way.
+        (Each part is timed; every 8 steps the totals go in the log, to see what's slow.)"""
         self.steps += 1
+        t = getattr(self, "_times", None)
+        if t is None:
+            t = self._times = {}
+        mark = [time.time()]
+
+        def lap(name):
+            now = time.time()
+            t[name] = t.get(name, 0.0) + now - mark[0]
+            mark[0] = now
+        if getattr(self, "_step_started", None):
+            t["dig"] = t.get("dig", 0.0) + mark[0] - self._step_started
         if self.guard(owner_radius=0.0, self_radius=4.0):
+            lap("fight")
+            self._step_started = time.time()
             return
+        lap("guard")
         self.take_visible_ores()
+        lap("ores")
         if self.steps % 4 == 0:
             self.ctx.collect(3, self)  # the dug blocks' drops
+        lap("collect")
         if self.prov.pick_tier() < 1 and self.prov.crafter.count("cobble") >= 3:
             if self.prov.ensure_pickaxe(1):
                 self.ctx.say("made a stone pickaxe.")
         if self.steps % 16 == 0:
             self.ctx.say(f"y {self.pos()[1]}, {self.have() - self.start_have} so far.")
+        lap("checks")
         self.light_the_way()
+        lap("torch")
         self.ctx.maybe_eat()
         if self.steps % 6 == 0:
             self.ctx.drop_junk()
         self.ctx.select_best(PICKAXES)
+        lap("misc")
+        if self.steps % 8 == 0:
+            import journal
+            journal.log("note", "mining step times (s, last 8 steps)", **{k: round(v, 1) for k, v in t.items()})
+            self._times = {}
+        self._step_started = time.time()
 
     def take_visible_ores(self, radius=6):
         """Mine every wanted ore Keve can see from here (and the vein behind it)."""

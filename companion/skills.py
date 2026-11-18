@@ -382,10 +382,19 @@ class Ctx:
                 if n > 0 and ((ok is not None and ok(i)) or i in self.made_batch)]
 
     def select_best(self, short_names):
-        n = self.has(short_names)
-        if n:
-            self.body.call(f"select minecraft:{n}")
-        return n
+        """The best of these he has, in hand. If it's in the backpack, it's moved onto the
+        hotbar first (select only reaches the hotbar: a pickaxe pushed into the pack had
+        him breaking deepslate with a torch, 12 s a block, failing)."""
+        counts = self.counts()
+        for n in short_names:  # best first; one he can't get into his hand: the next one
+            if counts.get("minecraft:" + n, 0) <= 0:
+                continue
+            if not self.body.call(f"select minecraft:{n}").get("error"):
+                return n
+            self.to_hotbar("minecraft:" + n)
+            if not self.body.call(f"select minecraft:{n}").get("error"):
+                return n
+        return None
 
     # --- where the owner is (a teammate's position, as the locator bar shows it) --------
     def owner(self):

@@ -73,6 +73,7 @@ class BeatTheGame(Task):
         ctx = self.ctx
         q = self.progress()
         ctx.say("ok, let's BEAT THE GAME! stage by stage, all the way to the dragon.")
+        self.fix_offhand()
         if not self.night() and ctx.in_hole():
             ctx.climb_out(self)
         for name, check, do in self.stages():
@@ -375,12 +376,29 @@ class BeatTheGame(Task):
         return "shield" in str(inv.get("offhand") or "")
 
     def hold_shield(self):
-        """The shield goes in the off hand (F swaps hands), where it blocks."""
+        """The shield goes in the off hand (F swaps hands), where it blocks. Only when the
+        shield really is in his hand: F with anything else in hand sends that to the off hand
+        (it sent his iron pickaxe there, and he dug with a torch)."""
         if not have(self.ctx, "shield"):
             return
+        self.ctx.to_hotbar("minecraft:shield")
         self.ctx.body.call("select minecraft:shield")
+        held = (self.ctx.body.call("inventory").get("held") or {}).get("item", "")
+        if "shield" not in held:
+            return
         self.ctx.body.call("key f tap")
         time.sleep(0.3)
+
+    def fix_offhand(self):
+        """A tool stuck in the off hand (from a swap gone wrong): back into the hand."""
+        inv = self.ctx.body.call("inventory")
+        off = (inv.get("offhand") or {}).get("item", "") if isinstance(inv.get("offhand"), dict) else str(inv.get("offhand") or "")
+        if any(k in off for k in ("pickaxe", "sword", "_axe", "shovel")):
+            empty = next((s["slot"] for s in inv.get("hotbar", []) if not s.get("item")), None)
+            if empty is not None:
+                self.ctx.body.call(f"select {empty}")
+            self.ctx.body.call("key f tap")  # the off hand's tool comes to the hand
+            time.sleep(0.3)
 
     def wear(self, item):
         """Right-click armour in hand to put it on, like a player."""
