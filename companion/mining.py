@@ -96,9 +96,17 @@ class Provision:
             import containers
             if containers.take_for_recipe(ctx, self.task, self.goal, quiet=True):
                 return True
-        if what == "log":
+        if what == "log" or what.endswith("_log") or what.startswith("tag:") and "log" in what:
+            # Trees he can't reach (up a cliff, over a ravine): don't try again and again
+            # (ten tries, half an hour). Once failed, no wood for a while: go without.
+            if time.time() - getattr(self, "wood_failed", 0) < 600:
+                return False
+            before = self.crafter.count("log")
             ctx.say(f"need wood first, getting {n + 1} logs")
             self.sub(Gather, item="wood", count=n + 1)
+            if self.crafter.count("log") <= before:
+                self.wood_failed = time.time()
+                return False
         elif what == "cobble":
             if self.pick_tier() < 0 and not self.ensure("wooden_pickaxe", 1, depth + 1):
                 return False

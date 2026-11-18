@@ -846,7 +846,14 @@ class Task:
             hp = ctx.state()["player"].get("health", 20)
         except Exception:
             hp = 20
-        if hp <= 8 and not getattr(self, "_hiding", False):
+        m = min(targets, key=lambda m: m["distance"])
+        close = [t for t in targets if t["distance"] < 6]
+        melee = m["distance"] < 3.5 and m.get("type", "").removeprefix("minecraft:") not in RANGED
+        if hp <= 8 and melee and len(close) <= 2 and hp > 2:
+            # One or two right on him: digging a hole takes seconds of free hits (a zombie
+            # killed him mid-dig at y 8). Finish it off instead, then hide if still hurt.
+            pass
+        elif hp <= 8 and not getattr(self, "_hiding", False):
             # Losing: don't slug it out. Dig in and heal, like a player would.
             self._hiding = True
             try:
