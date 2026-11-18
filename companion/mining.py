@@ -460,6 +460,7 @@ class Mine(Task):
             if not self.done():
                 ctx.say("I couldn't make a pickaxe.")
             return
+        self.need_tier = tier
         if tier >= 2 and self.prov.pick_tier() < 2:
             self.wanted |= {"iron", "coal"}
             ctx.say(f"{ore} needs an iron pickaxe, I'll grab iron on the way down.")
@@ -571,6 +572,15 @@ class Mine(Task):
         if used >= 35:
             self.ctx.say("my inventory is full.")
             return True
+        need = getattr(self, "need_tier", 0)
+        if 0 <= self.prov.pick_tier() < need:
+            # The good pickaxe wore out (diamonds need iron or better): a new one from iron
+            # he has, or go after iron first.
+            if self.counts_of("iron_ingot") + self.counts_of("raw_iron") >= 3:
+                self.upgrade_to_iron()
+            elif "iron" not in self.wanted:
+                self.wanted |= {"iron"}
+                self.ctx.say("my iron pickaxe wore out. getting iron for a new one!")
         if self.prov.pick_tier() < 0:
             if not self.new_pickaxe_down_here():
                 self.ctx.say("my pickaxe broke and I've got nothing to make another. heading up!")

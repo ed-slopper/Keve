@@ -339,7 +339,7 @@ class BeatTheGame(Task):
                         pass
                 # else: the meat's gone (he died, or ate it): nothing to cook
 
-    IRON = 10  # pickaxe 3, sword 2, bucket 3, shield 1, flint and steel 1 (a shield beats a
+    IRON = 13  # two pickaxes 6 (one wears out on the way to diamonds), sword 2, bucket 3, shield 1, flint and steel 1 (a shield beats a
                # chestplate for the iron: it stops arrows, and 8 iron is an hour of digging)
 
     def iron_done(self):
@@ -362,8 +362,13 @@ class BeatTheGame(Task):
 
     def iron_gear(self):
         import life as _life
-        steps = [("craft", {"item": i, "count": 1}) for i in ("iron_pickaxe", "iron_sword", "bucket", "shield")
+        steps = [("craft", {"item": i, "count": 1}) for i in ("iron_sword", "bucket", "shield")
                  if not have(self.ctx, i) and not (i == "shield" and self.has_shield())]
+        picks = self.ctx.counts().get("minecraft:iron_pickaxe", 0)
+        if picks < 2 and self.ctx.counts().get("minecraft:iron_ingot", 0) >= 3 * (2 - picks) + 3 * (not have(self.ctx, "bucket")):
+            steps.insert(0, ("craft", {"item": "iron_pickaxe", "count": 2 - picks}))
+        elif not picks:
+            steps.insert(0, ("craft", {"item": "iron_pickaxe", "count": 1}))
         if steps:
             self.sub(_life.Sequence, steps=steps)
         self.hold_shield()
