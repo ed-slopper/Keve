@@ -440,7 +440,8 @@ class Mine(Task):
         blocks, drops, tier, best_y = ORES[ore]
         self.prov = Provision(ctx, self)
         self.wanted = {ore, "coal"}  # coal on the way too: torches for the dark
-        self.deadline = time.time() + self.MAX_MINUTES * 60
+        # A big order gets longer down there (17 iron is more than 20 minutes' digging).
+        self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want) * 60
         self.drop_names = {"minecraft:" + d for d in drops}
         ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
         self.start_have = self.have()

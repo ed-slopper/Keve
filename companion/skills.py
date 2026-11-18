@@ -6,6 +6,7 @@ thread sends `stop` on the other connection.
 """
 import math
 import random
+import re
 import threading
 import time
 
@@ -1160,7 +1161,18 @@ class Gather(Task):
             ctx.select_best(AXES)
             ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
             r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 15")
+            for _ in range(3):  # leaves (or a bush) in front of the trunk: through them first
+                m = re.search(r"(minecraft:[a-z_]+) at \[(-?\d+), (-?\d+), (-?\d+)\] is in the way", str(r.get("error", "")))
+                if not m or not any(k in m.group(1) for k in ("leaves", "litter", "grass", "fern", "bush", "vine", "flower")):
+                    break
+                q = (int(m.group(2)), int(m.group(3)), int(m.group(4)))
+                ctx.body.call(f"look-at block {q[0]} {q[1]} {q[2]}")
+                ctx.body.call(f"break {q[0]} {q[1]} {q[2]} --timeout 5")
+                ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
+                r = ctx.body.call(f"break {p[0]} {p[1]} {p[2]} --timeout 15")
             if r.get("error"):
+                import journal
+                journal.log("note", f"chop {p}: {str(r['error'])[:160]}")
                 return False
             if ctx.block_came_back(p, block_ok):
                 self.reverted = True  # the server put it back: protected ground
