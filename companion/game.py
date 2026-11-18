@@ -46,7 +46,7 @@ class BeatTheGame(Task):
             ("food", lambda: have(c, *FOOD, n=5), self.food),
             ("iron", lambda: self.iron_done(), self.iron),
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
-                and have(c, "bucket", "water_bucket", "lava_bucket") and wearing(c, "chestplate"), self.iron_gear),
+                and have(c, "bucket", "water_bucket", "lava_bucket") and self.has_shield(), self.iron_gear),
             ("diamonds", lambda: have(c, "diamond_pickaxe") and have(c, "diamond_sword"), self.diamonds),
             ("obsidian", lambda: have(c, "obsidian", n=10), self.not_yet("making obsidian (water on lava)")),
             ("nether portal", lambda: self.flag("portal"), self.not_yet("building and lighting a nether portal")),
@@ -323,13 +323,14 @@ class BeatTheGame(Task):
                         pass
                 # else: the meat's gone (he died, or ate it): nothing to cook
 
-    IRON = 17  # pickaxe 3, sword 2, bucket 3, chestplate 8, flint and steel 1
+    IRON = 10  # pickaxe 3, sword 2, bucket 3, shield 1, flint and steel 1 (a shield beats a
+               # chestplate for the iron: it stops arrows, and 8 iron is an hour of digging)
 
     def iron_done(self):
         c = self.ctx.counts()
         spent = 3 * c.get("minecraft:iron_pickaxe", 0) + 2 * c.get("minecraft:iron_sword", 0) \
             + 3 * (c.get("minecraft:bucket", 0) + c.get("minecraft:water_bucket", 0)) \
-            + (8 if wearing(self.ctx, "iron_chestplate") else 8 * c.get("minecraft:iron_chestplate", 0))
+            + (1 if self.has_shield() else 0)
         return c.get("minecraft:iron_ingot", 0) + c.get("minecraft:raw_iron", 0) + spent >= self.IRON
 
     def iron(self):
@@ -345,11 +346,28 @@ class BeatTheGame(Task):
 
     def iron_gear(self):
         import life as _life
-        steps = [("craft", {"item": i, "count": 1}) for i in ("iron_pickaxe", "iron_sword", "bucket", "iron_chestplate")
-                 if not have(self.ctx, i) and not (i == "iron_chestplate" and wearing(self.ctx, "chestplate"))]
+        steps = [("craft", {"item": i, "count": 1}) for i in ("iron_pickaxe", "iron_sword", "bucket", "shield")
+                 if not have(self.ctx, i) and not (i == "shield" and self.has_shield())]
         if steps:
             self.sub(_life.Sequence, steps=steps)
-        self.wear("iron_chestplate")
+        self.hold_shield()
+
+    def has_shield(self):
+        if have(self.ctx, "shield"):
+            return True
+        try:
+            inv = self.ctx.body.call("inventory")
+        except Exception:
+            return False
+        return "shield" in str(inv.get("offhand") or "")
+
+    def hold_shield(self):
+        """The shield goes in the off hand (F swaps hands), where it blocks."""
+        if not have(self.ctx, "shield"):
+            return
+        self.ctx.body.call("select minecraft:shield")
+        self.ctx.body.call("key f tap")
+        time.sleep(0.3)
 
     def wear(self, item):
         """Right-click armour in hand to put it on, like a player."""
