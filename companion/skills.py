@@ -207,12 +207,23 @@ class Ctx:
     # What's worth carrying; anything else (terracotta, clay, stone of every kind, flowers...)
     # goes when the pockets fill up.
     KEEP_WORDS = ("pickaxe", "axe", "shovel", "hoe", "sword", "bow", "arrow", "shield", "helmet", "chestplate",
-                  "leggings", "boots", "ore", "raw_", "ingot", "nugget", "diamond", "emerald", "lapis", "redstone",
+                  "leggings", "boots", "ore", "raw_iron", "raw_gold", "ingot", "nugget", "diamond", "emerald",
                   "coal", "torch", "stick", "planks", "_log", "crafting_table", "furnace", "chest", "bucket",
                   "obsidian", "flint", "string", "leather", "ender", "blaze", "observer", "bed", "boat", "cooked_",
                   "beef", "porkchop", "mutton", "chicken", "rabbit", "bread", "apple", "carrot", "potato", "cod",
-                  "salmon", "melon_slice", "wheat", "sapling", "book", "gunpowder", "bone", "quartz", "gold",
+                  "salmon", "melon_slice", "wheat", "book", "gunpowder", "bone", "quartz", "gold",
                   "netherrack", "food")
+
+    def outclassed(self, item, slots):
+        """A wooden or stone tool when he carries the iron (or better) one of its kind:
+        junk. (Stone pickaxes stay: spares for the trip.)"""
+        name = item.removeprefix("minecraft:")
+        for low in ("wooden_", "stone_", "golden_"):
+            if name.startswith(low) and not name.endswith("pickaxe"):
+                kind = name[len(low):]
+                return any(s["item"].endswith(("iron_" + kind, "diamond_" + kind, "netherite_" + kind))
+                           for s in slots)
+        return False
 
     def safe_close(self):
         """Close a screen without throwing what's on the cursor: it goes into an empty slot
@@ -279,8 +290,11 @@ class Ctx:
                 cobble += s.get("count", 0)
                 if cobble <= keep_cobble:
                     continue  # a stack for building, plugging and pickaxes
+            elif it == "minecraft:wheat_seeds" or it.endswith("copper_ingot"):
+                pass  # junk all the same
             elif any(k in it for k in self.KEEP_WORDS):
-                continue
+                if not self.outclassed(it, slots):
+                    continue
             junk.append(s)
         thrown = []
         p = self.state()["player"]

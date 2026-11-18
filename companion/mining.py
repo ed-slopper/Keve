@@ -454,6 +454,7 @@ class Mine(Task):
         # Time down there: by the ore count, and by the depth (a staircase step a minute
         # is slow but real, and the bottom still needs branch mining time).
         depth = max(0, ctx.state()["player"]["block_pos"][1] - best_y)
+        self._stop = False
         self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want, depth // 3 + 20) * 60
         self.drop_names = {"minecraft:" + d for d in drops}
         ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
@@ -576,6 +577,17 @@ class Mine(Task):
         return sum(n for i, n in c.items() if i in self.drop_names)
 
     def finished(self):
+        """True once the trip should end, and it stays true: checked only every other step,
+        a full inventory once ended the way down but not the branch mining after it (40
+        minutes digging at y 12 with no room for a diamond)."""
+        if getattr(self, "_stop", False):
+            return True
+        if self.check_finished():
+            self._stop = True
+            return True
+        return False
+
+    def check_finished(self):
         if self.done() or getattr(self, "fell", False):
             return True
         self._checks = getattr(self, "_checks", 0) + 1
