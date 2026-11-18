@@ -264,10 +264,18 @@ class Ctx:
                 if sight.blocks_body(names.get(c, "minecraft:air")):
                     self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
                     self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
-            self.body.call(f"look-at {cx + 0.5:.2f} {y - 2 + 0.2:.2f} {cz + 0.5:.2f}")
+            self._pit_aim = (cx + 0.5 + 0.45 * dx, y + 0.3, cz + 0.5 + 0.45 * dz)
+            self.aim_pit()
             return lid
         self.body.call(f"look {p['yaw'] + 180:.0f} -20")
         return None
+
+    def aim_pit(self):
+        """At the hole's far wall, low: a steep throw straight down at the hole fell in his
+        own block and was his again; this one flies over, hits the wall and drops in."""
+        a = getattr(self, "_pit_aim", None)
+        if a:
+            self.body.call(f"look-at {a[0]:.2f} {a[1]:.2f} {a[2]:.2f}")
 
     def seal_pit(self, mouth):
         for item in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack"):
@@ -300,7 +308,7 @@ class Ctx:
                 if not self.outclassed(it, slots):
                     continue
             junk.append(s)
-        thrown = []
+        thrown, failed = [], []
         p = self.state()["player"]
         if not pit:
             self.body.call(f"look {p['yaw']:.0f} -15")  # throw it well ahead
@@ -325,10 +333,12 @@ class Ctx:
                     continue
                 self.body.call("close")
             else:
-                self.body.call("drop all")
+                d = self.body.call("drop all")
+                if (d.get("dropped_from") or {}).get("item") != s["item"]:
+                    failed.append((s["item"][10:], r.get("held", {}).get("item", "?")[10:] if isinstance(r.get("held"), dict) else str(r)[:60]))
             thrown.append(s["item"][10:])
             if pit:
-                self.body.call(f"look-at {pit[0] + 0.5:.2f} {pit[1] - 1 + 0.2:.2f} {pit[2] + 0.5:.2f}")
+                self.aim_pit()
             else:
                 self.body.call("move back 0.25")
         if pit:
@@ -337,7 +347,8 @@ class Ctx:
         now = self.body.call("inventory")
         after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
         import journal
-        journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}", pit=bool(pit), thrown=thrown[:8])
+        journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}", pit=bool(pit), thrown=thrown[:8], failed=failed[:6],
+                    left=sorted({x["item"][10:] for x in after} & set(thrown)))
 
     # --- ground where breaking doesn't stick (spawn protection, a claim) --------------
     def block_came_back(self, p, ok):
