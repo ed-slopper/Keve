@@ -572,6 +572,11 @@ class Mine(Task):
         if used >= 35:
             self.ctx.say("my inventory is full.")
             return True
+        picks = sum(self.counts_of(p) for p in PICK_TIER)
+        if picks <= 1 and self.counts_of("stick") < 2 and self.prov.crafter.count("planks") < 2:
+            # Last pickaxe and nothing to make another down here: up while it still works.
+            self.ctx.say("this is my last pickaxe and I've no sticks left. heading up while it lasts!")
+            return True
         need = getattr(self, "need_tier", 0)
         if 0 <= self.prov.pick_tier() < need:
             # The good pickaxe wore out (diamonds need iron or better): a new one from iron
@@ -599,6 +604,20 @@ class Mine(Task):
         stone comes from the digging), a crafting table to carry, and torches if there's
         coal. Short trips need none of it."""
         ctx = self.ctx
+        if underground(ctx):
+            # Already down here: pack only from what he carries (no climbing up for wood).
+            only = getattr(self.prov, "only_inventory", False)
+            self.prov.only_inventory = True
+            try:
+                for item, n in (("stick", 4), ("stone_pickaxe", 2)):
+                    if self.prov.crafter.count(item) < n:
+                        try:
+                            self.prov.ensure(item, n)
+                        except Exception:
+                            pass
+            finally:
+                self.prov.only_inventory = only
+            return
         here_y = ctx.state()["player"]["block_pos"][1]
         blocks = max(0, here_y - best_y) * 3 + 300
         tier = self.prov.pick_tier()
