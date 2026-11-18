@@ -236,32 +236,36 @@ class Ctx:
         self.body.call("close")
 
     def junk_pit(self):
-        """Where to throw junk so he doesn't walk over it and pick it straight back up (in a
-        1-wide tunnel it lands at his feet): a pocket dug two blocks into the side wall,
-        looked into. Returns the pocket's mouth (to seal after), or None on open ground,
-        where he just throws it ahead."""
+        """Where to throw junk so he doesn't pick it straight back up: a hole two deep in the
+        ground next to him (a thrown stack falls in, below his reach; facing a tunnel wall,
+        a stack thrown "ahead" bounced back to his feet and was his again in a second).
+        Returns the cell to seal over it, or None if there's nowhere to dig one."""
         p = self.state()["player"]
         x, y, z = p["block_pos"]
         yaw = math.radians(p["yaw"])
         fx, fz = -math.sin(yaw), math.cos(yaw)
-        sides = [(round(fz), round(-fx)), (round(-fz), round(fx))]  # left and right of facing
-        r = self.senses.call(f"blocks {x - 3} {y} {z - 3} {x + 3} {y} {z + 3}").get("blocks", [])
-        solid = {(b[0], b[1], b[2]) for b in r if sight.blocks_body(b[3])}
-        open_round = sum(1 for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)) if (x + dx, y, z + dz) not in solid)
-        if open_round >= 3:
-            self.body.call(f"look {p['yaw']:.0f} 10")  # open ground: just throw it ahead
-            return None
-        for sx, sz in sides:
-            a, b = (x + sx, y, z + sz), (x + 3 * sx, y, z + 3 * sz)
-            mid = (x + 2 * sx, y, z + 2 * sz)
-            if a not in solid or mid not in solid or b not in solid:
+        # Sides first (not the way the tunnel goes on), then ahead, then behind.
+        dirs = [(round(fz), round(-fx)), (round(-fz), round(fx)), (round(fx), round(fz)), (round(-fx), round(-fz))]
+        r = self.senses.call(f"blocks {x - 1} {y - 3} {z - 1} {x + 1} {y + 1} {z + 1}").get("blocks", [])
+        names = {(b[0], b[1], b[2]): b[3] for b in r}
+        bad = ("bedrock", "lava", "water", "chest", "furnace", "crafting_table", "torch")
+        for dx, dz in dirs:
+            if (dx, dz) == (0, 0):
                 continue
-            self.select_best(PICKAXES)
-            for c in (a, mid, b):
-                self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
-                self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
-            self.body.call(f"look-at {b[0] + 0.5:.2f} {y + 0.3:.2f} {b[2] + 0.5:.2f}")
-            return a
+            cx, cz = x + dx, z + dz
+            lid, pit, floor = (cx, y - 1, cz), (cx, y - 2, cz), (cx, y - 3, cz)
+            col = [names.get(c, "minecraft:air") for c in ((cx, y, cz), lid, pit, floor)]
+            if any(any(w in n for w in bad) for n in col):
+                continue
+            if not sight.blocks_body(col[1]) or not sight.blocks_body(col[3]):
+                continue  # no ground to dig the hole in, or it'd open onto a cave below
+            self.select_best(PICKAXES + ["netherite_shovel", "diamond_shovel", "iron_shovel", "stone_shovel"])
+            for c in ((cx, y, cz), lid, pit):
+                if sight.blocks_body(names.get(c, "minecraft:air")):
+                    self.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                    self.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 8")
+            self.body.call(f"look-at {cx + 0.5:.2f} {y - 2 + 0.2:.2f} {cz + 0.5:.2f}")
+            return lid
         self.body.call(f"look {p['yaw'] + 180:.0f} -20")
         return None
 
@@ -305,10 +309,7 @@ class Ctx:
             # further than one dropped out of the screen), stepping back from where it
             # lands so he doesn't pick it straight back up.
             if s["slot"] > 8:
-                self.body.call("open-inventory")
-                time.sleep(0.35)
-                self.body.call(f"click-slot {s['slot']} shift")
-                self.safe_close()
+                self.to_hotbar(s["item"])  # a swap: shift-click does nothing with the hotbar full
                 time.sleep(0.1)
             r = self.body.call(f"select {s['item']}")
             if r.get("error"):
@@ -326,10 +327,12 @@ class Ctx:
             else:
                 self.body.call("drop all")
             thrown.append(s["item"][10:])
-            if not pit:
+            if pit:
+                self.body.call(f"look-at {pit[0] + 0.5:.2f} {pit[1] - 1 + 0.2:.2f} {pit[2] + 0.5:.2f}")
+            else:
                 self.body.call("move back 0.25")
         if pit:
-            time.sleep(0.3)
+            time.sleep(1.0)  # all of it down the hole before the lid goes on
             self.seal_pit(pit)
         now = self.body.call("inventory")
         after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
