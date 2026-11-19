@@ -525,6 +525,17 @@ class Portal:
         if not p:
             return False
         ctx.walk_to(tuple(p), near=1.5, timeout=30, task=self.task)
+        # Gone out (it does: the frame stood empty when he came back): light it again.
+        ix, iy, iz = math.floor(p[0]), math.floor(p[1]), math.floor(p[2])
+        n = ctx.senses.call(f"blocks {ix} {iy} {iz} {ix} {iy} {iz}").get("blocks", [])
+        if not (n and "nether_portal" in n[0][3]) and count(ctx, "flint_and_steel"):
+            ctx.body.call(f"goto {p[0]:.2f} {p[1]:.2f} {p[2] + 2:.2f} --near 1 --timeout 6")
+            ctx.to_hotbar("minecraft:flint_and_steel")
+            ctx.body.call("select minecraft:flint_and_steel")
+            ctx.body.call(f"look-at block {ix} {iy - 1} {iz}")
+            ctx.body.call(f"interact {ix} {iy - 1} {iz} up")
+            time.sleep(1.0)
+            journal.log("quest", "portal: relit it")
         ctx.body.call(f"goto {p[0]:.2f} {p[1]:.2f} {p[2]:.2f} --near 0.3 --timeout 4 --direct")
         for _ in range(20):
             if "nether" in str(ctx.body.call("state").get("dimension", "")):
