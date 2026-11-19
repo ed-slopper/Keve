@@ -365,12 +365,21 @@ class Portal:
         import mining
         if mining.underground(ctx):
             mining.go_to_surface(ctx, self.task)
-        if count(ctx, "obsidian") < 10:
+        # A frame begun before (some obsidian already in it): finish that one.
+        import life
+        site = life.load_memory().get("places", {}).get("portal_site")
+        here = ctx.state()["player"]["position"]
+        built = 0
+        if site and math.dist(site, here) < 48:
+            sx, sy, sz = site
+            got = ctx.senses.call(f"blocks {sx} {sy} {sz} {sx + 3} {sy + 4} {sz}").get("blocks", [])
+            built = sum(1 for b in got if "obsidian" in b[3])
+        if count(ctx, "obsidian") + built < 10:
             ctx.say("I need 10 obsidian for a portal.")
             return False
         if not count(ctx, "flint_and_steel") and not self.flint_and_steel():
             return False
-        spot = self.find_spot()
+        spot = tuple(site) if built else self.find_spot()
         if spot is None:
             ctx.say("no flat open spot for a portal here.")
             return False
@@ -383,22 +392,20 @@ class Portal:
         if r.get("error") and "no walking path" in str(r["error"]):
             ctx.climb_out(self.task)
         helper = next((i for i in ("cobblestone", "cobbled_deepslate", "dirt") if count(ctx, i)), None)
-        # Order matters: everything placed has something to stick to.
-        plan = [((x, y, z), helper), ((x + 3, y, z), helper),
-                ((x + 1, y, z), "obsidian"), ((x + 2, y, z), "obsidian")]
-        for h in (1, 2, 3):
-            plan += [((x, y + h, z), "obsidian"), ((x + 3, y + h, z), "obsidian")]
-        plan += [((x, y + 4, z), helper), ((x + 3, y + 4, z), helper),
-                 ((x + 1, y + 4, z), "obsidian"), ((x + 2, y + 4, z), "obsidian")]
-        # Stand in front of it (or behind: the front was a dip in the ground where a grass
-        # block hid the whole frame from him).
-        for sz in (z + 2.5, z - 1.5):
-            ctx.body.call(f"goto {x + 1.5:.2f} {y:.2f} {sz:.2f} --near 0.8 --timeout 15")
+        import life
+        mem = life.load_memory()
+        mem.setdefault("places", {})["portal_site"] = [x, y, z]
+        life.save_memory(mem)
+        # Stand in front of it, two back (or behind: the front was a dip in the ground).
+        stand = None
+        for sz in (z + 2, z - 2):
+            ctx.body.call(f"goto {x + 1.5:.2f} {y:.2f} {sz + 0.5:.2f} --near 0.6 --timeout 15")
             p = ctx.state()["player"]["position"]
-            if math.dist((p[0], p[1], p[2]), (x + 1.5, y, sz)) < 1.5:
+            if abs(p[0] - (x + 1.5)) < 1.0 and abs(p[2] - (sz + 0.5)) < 1.0:
+                stand = sz
                 break
-        else:
-            ctx.walk_to((x + 1.5, y, z + 0.5), near=3, timeout=15, task=self.task)
+        if stand is None:
+            ctx.walk_to((x + 1.5, y, z + 2.5), near=1.5, timeout=15, task=self.task)
         # Grass, flowers, leaf litter where the frame goes: a block can't be put in them.
         for i in range(4):
             for h in range(5):
@@ -407,16 +414,34 @@ class Portal:
                 if n and not sight.blocks_body(n[0][3]) and not sight.is_fluid(n[0][3]):
                     ctx.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
                     ctx.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 3")
-        for cell, item in plan:
-            if self.task.done():
-                return False
-            if item is None:
-                continue
-            r = ctx.place(cell, "minecraft:" + item)
-            if r.get("error") and item == "obsidian":
-                journal.log("quest", "portal: a frame block wouldn't go", at=list(cell), error=str(r["error"])[:150])
+
+        def put(cells):
+            for cell, item in cells:
+                if self.task.done() or item is None:
+                    continue
+                n = ctx.senses.call(f"blocks {cell[0]} {cell[1]} {cell[2]} {cell[0]} {cell[1]} {cell[2]}").get("blocks", [])
+                if n and sight.blocks_body(n[0][3]):
+                    continue  # already there (a frame half built last time)
+                r = ctx.place(cell, "minecraft:" + item)
+                if r.get("error") and item == "obsidian":
+                    journal.log("quest", "portal: a frame block wouldn't go", at=list(cell), error=str(r["error"])[:150])
+
+        # A block goes on top of another only if he can see that top face: from the ground
+        # his eye is below the frame's upper half. So like a player: the bottom from the
+        # ground, then up a pillar under himself (jump, block below) a level at a time.
+        put([((x, y, z), helper), ((x + 3, y, z), helper),
+             ((x + 1, y, z), "obsidian"), ((x + 2, y, z), "obsidian")])
+        self.pillar_to(y + 1)
+        put([((x, y + 1, z), "obsidian"), ((x + 3, y + 1, z), "obsidian"),
+             ((x, y + 2, z), "obsidian"), ((x + 3, y + 2, z), "obsidian")])
+        self.pillar_to(y + 2)
+        put([((x, y + 3, z), "obsidian"), ((x + 3, y + 3, z), "obsidian")])
+        self.pillar_to(y + 3)
+        put([((x, y + 4, z), helper), ((x + 3, y + 4, z), helper),
+             ((x + 1, y + 4, z), "obsidian"), ((x + 2, y + 4, z), "obsidian")])
         # Light it: flint and steel on the inside of the bottom.
-        ctx.select_best(["flint_and_steel"])
+        ctx.to_hotbar("minecraft:flint_and_steel")
+        ctx.body.call("select minecraft:flint_and_steel")
         ctx.body.call(f"look-at block {x + 1} {y} {z}")
         ctx.body.call(f"interact {x + 1} {y} {z} up")
         time.sleep(1.0)
@@ -430,6 +455,27 @@ class Portal:
             mem.setdefault("places", {})["portal"] = [x + 1.5, y + 1, z + 0.5]
             life.save_memory(mem)
         return lit
+
+    def pillar_to(self, feet_y):
+        """Up a pillar of blocks under himself until his feet are at feet_y."""
+        ctx = self.ctx
+        block = next((i for i in ("cobblestone", "cobbled_deepslate", "dirt", "netherrack") if count(ctx, i)), None)
+        if block is None:
+            return False
+        for _ in range(6):
+            p = ctx.state()["player"]
+            x, y, z = p["block_pos"]
+            if y >= feet_y:
+                return True
+            ctx.to_hotbar("minecraft:" + block)
+            ctx.body.call(f"select minecraft:{block}")
+            ctx.body.call("look 0 90")
+            ctx.body.call("key space down")
+            time.sleep(0.35)
+            ctx.body.call(f"place {x} {y} {z}")
+            ctx.body.call("key space up")
+            time.sleep(0.8)
+        return ctx.state()["player"]["block_pos"][1] >= feet_y
 
     def flint_and_steel(self):
         """Flint (from gravel) and an iron ingot."""
