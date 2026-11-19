@@ -87,7 +87,8 @@ class Obsidian:
             eye = tuple(ctx.state()["player"]["eye"])
             if math.dist(eye, (p[0] + .5, p[1] + .5, p[2] + .5)) > 4.5:
                 continue
-            ctx.select_best(["bucket"])
+            ctx.to_hotbar("minecraft:bucket")
+            ctx.body.call("select minecraft:bucket")
             ctx.body.call(f"look-at block {p[0]} {p[1]} {p[2]}")
             ctx.body.call("use-item")
             time.sleep(0.4)
