@@ -97,13 +97,27 @@ class BeatTheGame(Task):
             journal.log("quest", f"stage: {name}")
             ctx.say(f"next up: {name}!")
             self.shelter()  # dark out? wait for morning first
-            for attempt in range(self.TRIES):
+            attempt, waits = 0, 0
+            while attempt < self.TRIES:
                 if self.done():
                     return
                 said_before = len(getattr(ctx, "said_log", []))
                 try:
                     do()
                 except Exception as e:  # a skill crashing is a thing to fix: write it down
+                    if "isn't in the world" in str(e) and waits < 5:
+                        waits += 1
+                        # Between worlds (a portal, a reconnect): wait for the world to load,
+                        # it isn't a failed try (two were gone in two seconds).
+                        for _ in range(60):
+                            time.sleep(1)
+                            try:
+                                ctx.state()
+                                break
+                            except Exception:
+                                if self.done():
+                                    return
+                        continue
                     import traceback
                     journal.log("quest", f"{name}: crashed", error=repr(e)[:300],
                                 trace=traceback.format_exc()[-1500:])
@@ -116,6 +130,7 @@ class BeatTheGame(Task):
                 q["stuck"].setdefault(name, []).append({"t": time.time(), "said": why})
                 self.save(q)
                 journal.log("quest", f"{name}: try {attempt + 1} didn't finish it", said=why)
+                attempt += 1
                 if getattr(self, "_cant", False):
                     break
             if not check():
