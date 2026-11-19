@@ -705,7 +705,11 @@ class NetherHunt:
         m = self.m
         visited = []
         end = time.time() + 20 * 60
-        if not self.on_bricks():
+        import life
+        known = life.load_memory().get("places", {}).get("blaze_spawner")
+        if known and math.dist(known, m.pos()) < 120:
+            fortress = known  # the spawner itself, not some lower part of the fortress
+        if math.dist(fortress, m.pos()) > 6 and not self.on_bricks():
             ctx.say("climbing up into the fortress.")
             self.go_toward(m, fortress)
         while time.time() < end and not self.done() and not self.have_enough():
@@ -728,8 +732,11 @@ class NetherHunt:
                 journal.log("quest", "nether: blazes over there", at=[round(v) for v in b])
                 self.go_toward(m, (round(b[0]), round(b[1]) - 2, round(b[2])))
                 continue
-            spawner = self.seen("spawner", r=16)
+            spawner = self.seen("spawner", r=16) or (tuple(known) if known and math.dist(known, m.pos()) < 10 else None)
             if spawner:
+                mem = life.load_memory()
+                mem.setdefault("places", {})["blaze_spawner"] = list(spawner)
+                life.save_memory(mem)
                 if math.dist(spawner, m.pos()) > 6:
                     journal.log("quest", "nether: blaze spawner", at=list(spawner))
                     self.go_toward(m, (spawner[0], spawner[1], spawner[2] + 3))
