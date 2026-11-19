@@ -185,9 +185,7 @@ class Obsidian:
         for leg in range(4):
             if self.done():
                 return False
-            r = ctx.senses.call("find-block minecraft:water 64")
-            here = ctx.eye_and_view()[3]
-            spots = [tuple(n["pos"]) for n in r.get("nearest", []) if n["pos"][1] >= 55]
+            spots = self.open_water_round()
             if spots:
                 w = spots[0]
                 ctx.say("I can see water over there, filling my bucket!")
@@ -202,6 +200,20 @@ class Obsidian:
             pos = p["position"]
             self.task.travel(pos[0] - math.sin(yaw) * 80, pos[2] + math.cos(yaw) * 80)
         return False
+
+    def open_water_round(self, r=48):
+        """Open water (sky over it) round about, nearest first: what a player standing on
+        the land sees of a lake or the sea. Read in four tiles (a read is capped)."""
+        x, _, z = self.ctx.state()["player"]["block_pos"]
+        water = []
+        for x0, z0 in ((x - r, z - r), (x, z - r), (x - r, z), (x, z)):
+            got = self.ctx.senses.call(f"blocks {x0} 56 {z0} {x0 + r} 67 {z0 + r}").get("blocks", [])
+            filled = {(b[0], b[1], b[2]) for b in got}
+            for b in got:
+                if b[3].startswith("minecraft:water") and b[1] <= 66 and (b[0], b[1] + 1, b[2]) not in filled:
+                    water.append((b[0], b[1], b[2]))
+        water.sort(key=lambda p: (p[0] - x) ** 2 + (p[2] - z) ** 2)
+        return water
 
     def worth_a_look(self):
         """Down a mine: stop for what obsidian needs. Obsidian already there; a water source
