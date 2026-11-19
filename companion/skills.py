@@ -882,6 +882,12 @@ class Task:
                            if m.get("type", "").removeprefix("minecraft:") in RANGED]
         if not targets:
             return False
+        # Something right on him beats an archer further off: chasing the skeleton while a
+        # zombie hit him every second killed him at y -58.
+        close = [e for e in ctx.senses.call("entities 3.5").get("entities", [])
+                 if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:") in HOSTILE]
+        if close:
+            targets = [min(close, key=lambda e: e["distance"])]
         try:
             hp = ctx.state()["player"].get("health", 20)
         except Exception:
