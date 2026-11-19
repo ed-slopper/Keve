@@ -566,6 +566,14 @@ class BeatTheGame(Task):
         import nether
         if "nether" in self.dim():
             return True
+        # Up out of the mine and over to it first: a 30-second walk at the portal from y 12
+        # underground failed all three tries.
+        import mining
+        if mining.underground(self.ctx):
+            mining.go_to_surface(self.ctx, self)
+        p = life.load_memory().get("places", {}).get("portal")
+        if p and not self.done():
+            self.travel(p[0], p[2])
         ok = nether.Portal(self).go_through()
         if ok:
             p = self.ctx.state()["player"]["position"]
