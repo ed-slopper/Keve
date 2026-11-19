@@ -384,7 +384,23 @@ class Portal:
             plan += [((x, y + h, z), "obsidian"), ((x + 3, y + h, z), "obsidian")]
         plan += [((x, y + 4, z), helper), ((x + 3, y + 4, z), helper),
                  ((x + 1, y + 4, z), "obsidian"), ((x + 2, y + 4, z), "obsidian")]
-        ctx.body.call(f"goto {x + 1.5:.2f} {y:.2f} {z + 2.5:.2f} --near 0.8 --timeout 15")
+        # Stand in front of it (or behind: the front was a dip in the ground where a grass
+        # block hid the whole frame from him).
+        for sz in (z + 2.5, z - 1.5):
+            ctx.body.call(f"goto {x + 1.5:.2f} {y:.2f} {sz:.2f} --near 0.8 --timeout 15")
+            p = ctx.state()["player"]["position"]
+            if math.dist((p[0], p[1], p[2]), (x + 1.5, y, sz)) < 1.5:
+                break
+        else:
+            ctx.walk_to((x + 1.5, y, z + 0.5), near=3, timeout=15, task=self.task)
+        # Grass, flowers, leaf litter where the frame goes: a block can't be put in them.
+        for i in range(4):
+            for h in range(5):
+                c = (x + i, y + h, z)
+                n = ctx.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
+                if n and not sight.blocks_body(n[0][3]) and not sight.is_fluid(n[0][3]):
+                    ctx.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                    ctx.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 3")
         for cell, item in plan:
             if self.task.done():
                 return False
