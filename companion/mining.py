@@ -455,7 +455,10 @@ class Mine(Task):
         # is slow but real, and the bottom still needs branch mining time).
         depth = max(0, ctx.state()["player"]["block_pos"][1] - best_y)
         self._stop = False
-        self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want, depth // 3 + 20) * 60
+        # Diamonds are rare (one vein in a few hundred blocks of tunnel): a long stint down there,
+        # not 25 minutes and back up empty-handed.
+        rare = 50 if ore == "diamond" else 0
+        self.deadline = time.time() + max(self.MAX_MINUTES, 3 * want, depth // 3 + 20, rare) * 60
         self.drop_names = {"minecraft:" + d for d in drops}
         ctx.quest_ok = lambda i: i in self.drop_names or i in ("minecraft:raw_iron", "minecraft:coal")
         self.start_have = self.have()
