@@ -723,6 +723,30 @@ class NetherHunt:
             blazes = sorted((e for e in ctx.senses.call("entities 48").get("entities", [])
                              if e.get("type") == "minecraft:blaze" and (e.get("health") or 1) > 0),
                             key=lambda e: e["distance"])
+            at_spawner = known and math.dist(known, m.pos()) < 12
+            if at_spawner and blazes:
+                # How blazes fight (Horizon's BlazeAttackGoal): while they see him they hover
+                # where they are and fire volleys of three, resting five seconds between;
+                # they only come in to melee range on their own. So: by the spawner (they
+                # spawn round it), shield up at the nearest, and hit whatever comes in reach.
+                if math.dist(known, m.pos()) > 2.5:
+                    ctx.walk_to((known[0] + 0.5, known[1], known[2] + 1.5), near=1.5, timeout=6, task=self.task)
+                b = blazes[0]
+                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                if b["distance"] <= 3.6:
+                    ctx.body.call("mouse right up")
+                    ctx.body.call(f"look-at entity {b['id']}")
+                    ctx.body.call(f"attack {b['id']}")
+                    ctx.body.call("wait 12")
+                else:
+                    ctx.body.call(f"look-at entity {b['id']}")
+                    if self.shield_up():
+                        time.sleep(0.8)
+                        ctx.body.call("mouse right up")
+                    else:
+                        time.sleep(0.5)
+                ctx.collect(4, self.task)
+                continue
             if blazes and blazes[0]["distance"] <= 16:
                 ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
                 ctx.hunt(blazes[0]["id"], 15.0, self.task)
