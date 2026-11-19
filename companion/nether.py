@@ -714,7 +714,14 @@ class NetherHunt:
             self.go_toward(m, fortress)
         while time.time() < end and not self.done() and not self.have_enough():
             hp = ctx.state()["player"].get("health", 20)
-            if hp < 10:
+            near = [e for e in ctx.senses.call("entities 8").get("entities", [])
+                    if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:")
+                    in ("wither_skeleton", "blaze", "skeleton", "magma_cube", "piglin_brute")]
+                    # (zombified piglins left out: they leave him be unless hit)
+            melee = [e for e in near if e["distance"] < 4 and "blaze" not in e["type"]]
+            if hp < 10 or len(near) >= 3 or len(melee) >= 2:
+                # Two wither skeletons on him at 3.8 a hit each and seven blazes about:
+                # dead in four seconds at the spawner. Out of the crowd first.
                 self.fall_back(visited, known)
                 continue
             if self.task.guard(owner_radius=0.0, self_radius=6.0):
