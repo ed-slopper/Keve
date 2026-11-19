@@ -579,6 +579,9 @@ class NetherHunt:
         m.prov = mining.Provision(ctx, m)
         m.wanted = {"gold"}
         m.open_ok = True  # caverns are the way through here, not caves to board up
+        # What a trip's run() would set up (its checks read them).
+        m.drop_names, m.start_have, m.goal = {"minecraft:gold_nugget"}, 0, 10 ** 6
+        m.deadline, m._stop, m.need_tier = time.time() + 3 * 3600, False, 0
         p = ctx.state()["player"]
         m.dir = mining.DIRS[round(((p["yaw"] % 360) / 90)) % 4]
         # Level with the fortresses first.

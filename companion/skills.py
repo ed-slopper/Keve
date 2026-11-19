@@ -874,8 +874,12 @@ class Task:
         if not targets and ctx.under_attack():
             # Getting hit by something he can't see (behind him, round a corner of the
             # stairs): he feels it, so he turns on whatever is right next to him.
+            # (Not a zombified piglin that hasn't been provoked: hitting one sets the whole
+            # pack on him, and a piglin's blow from behind made him do just that.)
             near = [e for e in ctx.senses.call("entities 4").get("entities", [])
-                    if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:") in HOSTILE | NEUTRAL]
+                    if e.get("kind") == "mob" and e.get("type", "").removeprefix("minecraft:") in HOSTILE | NEUTRAL
+                    and (e.get("type", "").removeprefix("minecraft:") != "zombified_piglin"
+                         or time.time() - ctx.provoked.get("zombified_piglin", 0) < 60)]
             if near:
                 targets = [min(near, key=lambda e: e["distance"])]
         if not targets:
