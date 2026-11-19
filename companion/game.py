@@ -424,6 +424,34 @@ class BeatTheGame(Task):
         import mining
         n = self.ctx.counts().get("minecraft:diamond", 0)
         if n < 5:
+            # Diamond needs an iron pickaxe, and deepslate wears one out: two of them before
+            # going down (iron at y 16 is quick; at y -58 with stone pickaxes he could see
+            # diamonds and not mine them, and the stone ones wore out in minutes).
+            c = self.ctx.counts()
+            picks = c.get("minecraft:iron_pickaxe", 0) + c.get("minecraft:diamond_pickaxe", 0)
+            iron = c.get("minecraft:iron_ingot", 0) + c.get("minecraft:raw_iron", 0)
+            if picks < 2 and iron < 3 * (2 - picks):
+                self.ctx.say("diamonds need iron pickaxes: getting iron for two first.")
+                self.sub(mining.Mine, ore="iron", count=3 * (2 - picks) - iron)
+                if self.done():
+                    return
+            prov = mining.Provision(self.ctx, self)
+            for _ in range(2):
+                c = self.ctx.counts()
+                if c.get("minecraft:iron_pickaxe", 0) + c.get("minecraft:diamond_pickaxe", 0) >= 2:
+                    break
+                if c.get("minecraft:iron_ingot", 0) + c.get("minecraft:raw_iron", 0) < 3:
+                    break
+                c0 = c.get("minecraft:iron_pickaxe", 0)
+                try:
+                    if prov.crafter.count("iron_ingot") < 3:
+                        prov.smelt("raw_iron", 3 - prov.crafter.count("iron_ingot"))
+                    prov.ensure("iron_pickaxe", c0 + 1)
+                except Exception as e:
+                    journal.log("quest", "iron pickaxe failed", err=str(e)[:80])
+                    break
+            if self.done():
+                return
             self.sub(mining.Mine, ore="diamond", count=5 - n)
         steps = [("craft", {"item": i, "count": 1}) for i in ("diamond_pickaxe", "diamond_sword") if not have(self.ctx, i)]
         if steps:

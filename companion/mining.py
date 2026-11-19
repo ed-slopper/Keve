@@ -1311,6 +1311,14 @@ def go_to_surface(ctx, task):
     for mine in m.known_mines():
         path = [tuple(p) for p in mine.get("path", [])]
         near = [n for n, p in enumerate(path) if math.dist(p, here) < 5]
+        if not near and path:
+            # Out along his branch tunnels: they're open all the way back to the stairs.
+            # Walk to the stairs instead of digging a new way up (26 minutes from y -58).
+            k = min(range(len(path)), key=lambda n: math.dist(path[n], here))
+            if math.dist(path[k], here) < 64 and abs(path[k][1] - here[1]) < 8:
+                r = ctx.walk_to(tuple(path[k]), near=1.5, timeout=60, task=task)
+                if r.get("arrived"):
+                    near = [k]
         if near:
             for p in path[near[0]::-3]:  # back up the steps toward the top
                 if task.done():
