@@ -376,6 +376,12 @@ class Portal:
             return False
         x, y, z = spot
         ctx.say(f"building a nether portal at {x} {y} {z}!")
+        # From a pit (an old hiding hole) there's no walking round the frame: out first.
+        if ctx.in_hole():
+            ctx.climb_out(self.task)
+        r = ctx.body.call(f"goto {x + 1.5:.2f} {y:.2f} {z + 2.5:.2f} --near 2.5 --timeout 15")
+        if r.get("error") and "no walking path" in str(r["error"]):
+            ctx.climb_out(self.task)
         helper = next((i for i in ("cobblestone", "cobbled_deepslate", "dirt") if count(ctx, i)), None)
         # Order matters: everything placed has something to stick to.
         plan = [((x, y, z), helper), ((x + 3, y, z), helper),
