@@ -10,6 +10,7 @@ import math
 import random
 import re
 import threading
+import os
 import time
 import traceback
 
@@ -696,8 +697,11 @@ def _check_ghost(self):
     journal.log("note", "dead but no death screen: rejoining")
     self._ghost_since = None
     try:
-        self.ctrl.call("respawn")
-        return
+        r = self.ctrl.call("respawn")
+        if not (isinstance(r, dict) and r.get("error")):
+            time.sleep(2)
+            if self.ctrl.call("state")["player"].get("health", 0) > 0:
+                return
     except CtlError:
         pass
     try:
@@ -707,6 +711,18 @@ def _check_ghost(self):
         raw.call(f"connect 127.0.0.1:{getattr(self.args, 'port', 25565)} {self.name}")
     except CtlError as e:
         journal.log("note", "rejoin failed", error=str(e)[:120])
+    time.sleep(8)
+    try:
+        if self.ctrl.call("state")["player"].get("health", 0) > 0:
+            return
+    except Exception:
+        pass
+    # Still a ghost: only a fresh client gets the death screen. Exit with 75 so whatever
+    # started Keve (the training loop) starts him again.
+    self._ghost_tries = getattr(self, "_ghost_tries", 0) + 1
+    if self._ghost_tries >= 2:
+        journal.log("note", "still dead with no death screen: restarting Keve")
+        os._exit(75)
 
 
 Keve.check_ghost = _check_ghost
