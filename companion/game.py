@@ -42,7 +42,10 @@ class BeatTheGame(Task):
         return [
             ("stone tools", lambda: have(c, "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe")
                 and have(c, "stone_sword", "iron_sword", "diamond_sword")
-                and have(c, "stone_axe", "iron_axe", "diamond_axe"), self.stone_tools),
+                and (have(c, "stone_axe", "iron_axe", "diamond_axe") or have(c, "oak_log", "birch_log", "spruce_log",
+                     "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", n=16)), self.stone_tools),
+            # (an axe is for wood: with a stack of logs he doesn't need one, and making one by
+            # the sea had him digging for cobblestone into the water)
             ("food", lambda: have(c, *FOOD, n=5), self.food),
             ("iron", lambda: self.iron_done(), self.iron),
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
