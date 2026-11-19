@@ -1387,6 +1387,39 @@ def go_to_surface(ctx, task):
                 m._told_bare = True
         if not m.stair_up():
             m.turn()
+            fails = getattr(m, "_up_fails", 0) + 1
+            m._up_fails = fails
+            if fails % 3 == 0 and walk_to_daylight(ctx, task):
+                continue  # in a huge open cave: walked to where the sky shows instead
         if m.guard(owner_radius=0.0, self_radius=4.0):
             continue
     return not underground(ctx)
+
+
+def walk_to_daylight(ctx, task):
+    """In a big open cave (the staircase up keeps running into it): the nearest spot in it
+    with the sky over it, walked to. True when he went somewhere brighter."""
+    x, y, z = (int(math.floor(v)) for v in ctx.eye_and_view()[3])
+    best = None
+    for dy in (0, 4, 8):
+        r = ctx.senses.call(f"light {x - 16} {y + dy} {z - 16} {x + 16} {y + dy + 3} {z + 16}")
+        sky = r.get("sky", "")
+        if not sky:
+            continue
+        nx, ny = 33, 4
+        for i, ch in enumerate(sky):
+            if ch == "." or int(ch, 16) < 13:
+                continue
+            ix, rest = i % nx, i // nx
+            iz, iy = rest % 33, rest // 33
+            c = (x - 16 + ix, y + dy + iy, z - 16 + iz)
+            d = math.dist(c, (x, y, z))
+            if best is None or d < best[0]:
+                best = (d, c)
+    if best is None:
+        return False
+    c = best[1]
+    import journal
+    journal.log("note", "big open cave: walking to daylight", at=list(c))
+    r = ctx.walk_to((c[0] + 0.5, c[1], c[2] + 0.5), near=2, timeout=30, task=task)
+    return bool(r.get("arrived")) or not underground(ctx)
