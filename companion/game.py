@@ -97,6 +97,11 @@ class BeatTheGame(Task):
                 if full:
                     continue  # not hungry: on with the run (the animals round spawn are hunted
                     # out; a 500-block walk for meat he doesn't need yet got the stage stuck)
+            if name == "armor" and "armor" in q["done"]:
+                c0 = ctx.counts()
+                if c0.get("minecraft:diamond", 0) < 8 and c0.get("minecraft:iron_ingot", 0) + c0.get("minecraft:raw_iron", 0) < 8:
+                    continue  # worn out again with nothing to hand for a new one: on without it
+                    # (an hour and a half round the mined-out spawn found no iron)
             if name in ("iron", "iron gear") and "iron gear" in q["done"]:
                 continue  # done before: worn-out tools are the mining trip's business (it
                 # gets iron for a new pickaxe itself), not 13 more iron from scratch
