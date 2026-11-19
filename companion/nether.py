@@ -713,6 +713,10 @@ class NetherHunt:
             ctx.say("climbing up into the fortress.")
             self.go_toward(m, fortress)
         while time.time() < end and not self.done() and not self.have_enough():
+            hp = ctx.state()["player"].get("health", 20)
+            if hp < 10:
+                self.fall_back(visited, known)
+                continue
             if self.task.guard(owner_radius=0.0, self_radius=6.0):
                 continue
             ctx.maybe_eat(below=19)
@@ -725,7 +729,8 @@ class NetherHunt:
                 time.sleep(0.4)
                 ctx.collect(8, self.task)
                 continue
-            if blazes:
+            at_spawner = known and math.dist(known, m.pos()) < 12
+            if blazes and not at_spawner:
                 # Shooting at him from across the fortress (they did, from 37 blocks, and he
                 # stood there): over to them, where their spawner is.
                 b = blazes[0]["pos"]
@@ -751,6 +756,31 @@ class NetherHunt:
             r = ctx.walk_to((nxt[0] + 0.5, nxt[1] + 1, nxt[2] + 0.5), near=2, timeout=15, task=self.task)
             if not r.get("arrived"):
                 self.go_toward(m, (nxt[0], nxt[1] + 1, nxt[2]))
+
+    def fall_back(self, visited, spawner):
+        """Hurt at the spawner: back along the corridor out of the fight, eat, heal, then
+        back to it (stood his ground at 3 hearts against a wither skeleton and two blazes)."""
+        ctx = self.ctx
+        ctx.say("too hot here, falling back to heal!")
+        here = self.m.pos()
+        away = [v for v in visited if math.dist(v, spawner or here) > 12]
+        if away:
+            v = max(away, key=lambda v: math.dist(v, spawner or here))
+            self.shield_up()
+            try:
+                ctx.walk_to((v[0] + 0.5, v[1] + 1, v[2] + 0.5), near=2, timeout=12, task=self.task)
+            finally:
+                ctx.body.call("mouse right up")
+        else:
+            ctx.hide(self.task)
+        end = time.time() + 45
+        while time.time() < end and not self.done():
+            if self.task.guard(owner_radius=0.0, self_radius=4.0):
+                continue
+            ctx.maybe_eat(below=19)
+            if ctx.state()["player"].get("health", 20) >= 16:
+                return
+            time.sleep(1.5)
 
     def on_bricks(self):
         x, y, z = self.ctx.state()["player"]["block_pos"]
