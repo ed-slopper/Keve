@@ -133,16 +133,25 @@ class Obsidian:
                 if math.dist(me, stand) > 1.5:
                     continue
                 ctx.say("pouring water on the lava for obsidian!")
-                ctx.select_best(["water_bucket"])
+                # The bucket by name (select_best is for tools: it held something else and
+                # "poured" a pickaxe on the bank a dozen times over).
+                ctx.to_hotbar("minecraft:water_bucket")
+                ctx.body.call("select minecraft:water_bucket")
                 ctx.body.call(f"look-at block {bank[0]} {bank[1]} {bank[2]}")
-                ctx.body.call(f"interact {bank[0]} {bank[1]} {bank[2]} up")
+                r = ctx.body.call(f"interact {bank[0]} {bank[1]} {bank[2]} up")
+                if (r.get("inventory_change") or {}).get("minecraft:water_bucket", 0) >= 0:
+                    journal.log("quest", "obsidian: the water didn't go down", at=list(bank))
+                    continue
                 time.sleep(3.0)  # the water runs over the lava
-                # The water back into the bucket (or it floods the place).
-                ctx.select_best(["bucket"])
-                ctx.body.call(f"look-at block {above[0]} {above[1]} {above[2]}")
+                # The water back into the bucket (or it floods the place): the bank's top,
+                # where the water stands.
+                ctx.to_hotbar("minecraft:bucket")
+                ctx.body.call("select minecraft:bucket")
+                ctx.body.call(f"look-at block {bank[0]} {bank[1]} {bank[2]}")
                 ctx.body.call("use-item")
                 time.sleep(0.5)
-                journal.log("quest", "obsidian: poured water on lava", at=list(L))
+                journal.log("quest", "obsidian: poured water on lava", at=list(L),
+                            back=bool(count(ctx, "water_bucket")))
                 return True
         return False
 
