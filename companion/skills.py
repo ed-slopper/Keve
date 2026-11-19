@@ -427,6 +427,19 @@ class Ctx:
             near = self.senses.call(f"blocks {x - 2} {y - 3} {z - 2} {x + 2} {y + 1} {z + 2}").get("blocks", [])
             if any("water" in b[3] or "lava" in b[3] for b in near):
                 return  # still wet all round: fight on instead
+        # Only into solid ground: on a Nether fortress bridge (or netherrack over the lava
+        # sea) the hole opened onto the lava below and he fell in.
+        col = self.senses.call(f"blocks {x} {y - 5} {z} {x} {y - 1} {z}").get("blocks", [])
+        solid = {(b[0], b[1], b[2]) for b in col if sight.blocks_body(b[3]) and not sight.is_fluid(b[3])}
+        if any((x, y - d, z) not in solid for d in range(1, 6)):
+            self.say("ouch, I'm hurt! backing off, no safe ground to dig into here.")
+            p = self.state()["player"]
+            yaw = math.radians(p["yaw"] + 180)
+            pos = p["position"]
+            self.body.call(f"goto {pos[0] - math.sin(yaw) * 6:.1f} {pos[1]:.1f} {pos[2] + math.cos(yaw) * 6:.1f} "
+                           f"--near 3 --timeout 5 --sprint")
+            self.maybe_eat(below=19)
+            return
         self.say("ouch, I'm hurt! hiding to heal up.")
         for c in ((x, y - 1, z), (x, y - 2, z), (x, y - 3, z)):  # three: the lid needs ground round it
             n = self.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
