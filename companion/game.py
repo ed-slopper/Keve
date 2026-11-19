@@ -47,7 +47,7 @@ class BeatTheGame(Task):
             ("iron", lambda: self.iron_done(), self.iron),
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
                 and have(c, "bucket", "water_bucket", "lava_bucket") and self.has_shield(), self.iron_gear),
-            ("diamonds", lambda: have(c, "diamond_pickaxe") and have(c, "diamond_sword"), self.diamonds),
+            ("diamonds", lambda: have(c, "diamond_pickaxe"), self.diamonds),  # the sword is a bonus
             ("obsidian", lambda: have(c, "obsidian", n=10) or self.flag("portal"), self.obsidian),
             ("nether portal", lambda: self.flag("portal"), self.nether_portal),
             ("blaze rods", lambda: c.counts().get("minecraft:blaze_rod", 0) + c.counts().get("minecraft:blaze_powder", 0) // 2
@@ -422,8 +422,10 @@ class BeatTheGame(Task):
     def diamonds(self):
         import life as _life
         import mining
-        n = self.ctx.counts().get("minecraft:diamond", 0)
-        if n < 5:
+        # Three for the pickaxe (obsidian needs it); the sword's two more only if they turn
+        # up (an iron one does for the dragon, and deepslate eats an iron pickaxe in half an hour).
+        n = self.ctx.counts().get("minecraft:diamond", 0) + 3 * have(self.ctx, "diamond_pickaxe")
+        if n < 3:
             # Diamond needs an iron pickaxe, and deepslate wears one out: two of them before
             # going down (iron at y 16 is quick; at y -58 with stone pickaxes he could see
             # diamonds and not mine them, and the stone ones wore out in minutes).
@@ -452,8 +454,11 @@ class BeatTheGame(Task):
                     break
             if self.done():
                 return
-            self.sub(mining.Mine, ore="diamond", count=5 - n)
-        steps = [("craft", {"item": i, "count": 1}) for i in ("diamond_pickaxe", "diamond_sword") if not have(self.ctx, i)]
+            self.sub(mining.Mine, ore="diamond", count=3 - n)
+        steps = [("craft", {"item": "diamond_pickaxe", "count": 1})] if not have(self.ctx, "diamond_pickaxe") else []
+        if self.ctx.counts().get("minecraft:diamond", 0) >= 2 + 3 * (not have(self.ctx, "diamond_pickaxe")) \
+                and not have(self.ctx, "diamond_sword"):
+            steps.append(("craft", {"item": "diamond_sword", "count": 1}))
         if steps:
             self.sub(_life.Sequence, steps=steps)
 
