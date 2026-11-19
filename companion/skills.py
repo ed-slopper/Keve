@@ -700,6 +700,11 @@ class Ctx:
         # Ticks until a full-strength hit again (vanilla attack speed): fists 4/s,
         # swords 1.6/s, axes about 0.8-1/s, anything else 4/s like a fist.
         cooldown = 13 if held.endswith("_sword") else 22 if held.endswith("_axe") else 5
+        try:
+            off = self.body.call("inventory").get("offhand") or {}
+            shield = "shield" in str(off.get("item") if isinstance(off, dict) else off)
+        except Exception:
+            shield = False
         stalled = 0
         while time.time() < end and not (task is not None and task.done()):
             ents = self.senses.call("entities 24").get("entities", [])
@@ -720,7 +725,14 @@ class Ctx:
                 stalled = 0 if (r.get("moved") or 0) > 0.15 else stalled + 1
                 continue
             if not self.body.call(f"attack {mob_id}").get("error"):
-                self.body.call(f"wait {cooldown}")
+                if shield:
+                    # Between swings, shield up toward it, like a player: two wither
+                    # skeletons took a bare-waiting Keve from 15 to 0 in three seconds.
+                    self.body.call("mouse right down")
+                    self.body.call(f"wait {cooldown}")
+                    self.body.call("mouse right up")
+                else:
+                    self.body.call(f"wait {cooldown}")
             else:
                 self.body.call("move forward 0.15")
         if last:  # walk over the drops
