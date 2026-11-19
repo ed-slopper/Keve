@@ -579,6 +579,7 @@ class NetherHunt:
         m.prov = mining.Provision(ctx, m)
         m.wanted = {"gold"}
         m.open_ok = True  # caverns are the way through here, not caves to board up
+        self.m = m
         # What a trip's run() would set up (its checks read them).
         m.drop_names, m.start_have, m.goal = {"minecraft:gold_nugget"}, 0, 10 ** 6
         m.deadline, m._stop, m.need_tier = time.time() + 3 * 3600, False, 0
@@ -675,30 +676,74 @@ class NetherHunt:
         return None
 
     def blazes(self, fortress):
-        """Into the fortress: to the blaze spawner if one shows, fight blazes near it."""
+        """Into the fortress and along its corridors: to the blaze spawner if one shows,
+        fight the blazes near it. (Stood under it four minutes: it's up on pillars, no
+        path, and from below there's no spawner in sight.)"""
         ctx = self.ctx
-        ctx.walk_to(tuple(fortress), near=3, timeout=30, task=self.task)
-        end = time.time() + 15 * 60
+        m = self.m
+        visited = []
+        end = time.time() + 20 * 60
+        if not self.on_bricks():
+            ctx.say("climbing up into the fortress.")
+            self.go_toward(m, fortress)
         while time.time() < end and not self.done() and not self.have_enough():
-            spawner = self.seen("spawner", r=20)
-            if spawner:
-                ctx.walk_to((spawner[0] + 3, spawner[1], spawner[2]), near=3, timeout=20, task=self.task)
+            if self.task.guard(owner_radius=0.0, self_radius=6.0):
+                continue
+            ctx.maybe_eat(below=19)
             fought = False
-            for e in ctx.senses.call("entities 16").get("entities", []):
+            for e in ctx.senses.call("entities 20").get("entities", []):
                 if e.get("type") == "minecraft:blaze" and (e.get("health") or 1) > 0:
                     ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
                     ctx.hunt(e["id"], 15.0, self.task)
                     fought = True
                     break
-            time.sleep(0.5)
-            ctx.collect(8, self.task)
-            if not fought and not spawner:
-                # No spawner, no blazes here: along the fortress a bit.
-                b = self.seen("nether_bricks", r=20)
-                if b:
-                    ctx.walk_to(tuple(b), near=2, timeout=15, task=self.task)
-            if self.task.guard(owner_radius=0.0, self_radius=5.0):
+            if fought:
+                time.sleep(0.4)
+                ctx.collect(8, self.task)
                 continue
+            spawner = self.seen("spawner", r=16)
+            if spawner:
+                if math.dist(spawner, m.pos()) > 6:
+                    journal.log("quest", "nether: blaze spawner", at=list(spawner))
+                    self.go_toward(m, (spawner[0], spawner[1], spawner[2] + 3))
+                time.sleep(1.0)  # by the spawner: they come to him
+                continue
+            # Along the fortress: a corridor floor further off he hasn't been to yet.
+            nxt = self.next_corridor(visited)
+            if nxt is None:
+                journal.log("quest", "nether: fortress explored, no blazes found here")
+                return
+            visited.append(nxt)
+            r = ctx.walk_to((nxt[0] + 0.5, nxt[1] + 1, nxt[2] + 0.5), near=2, timeout=15, task=self.task)
+            if not r.get("arrived"):
+                self.go_toward(m, (nxt[0], nxt[1] + 1, nxt[2]))
+
+    def on_bricks(self):
+        x, y, z = self.ctx.state()["player"]["block_pos"]
+        n = self.ctx.senses.call(f"blocks {x} {y - 1} {z} {x} {y - 1} {z}").get("blocks", [])
+        return bool(n) and "nether_brick" in n[0][3]
+
+    def next_corridor(self, visited):
+        """A nether-brick floor in sight, 8 to 16 blocks off, room to stand on it, away
+        from where he's already been."""
+        eye = tuple(self.ctx.state()["player"]["eye"])
+        snap = sight.Snapshot.read(self.ctx.senses, eye, rh=16, rv=6)
+        best = None
+        for p, n in snap.blocks.items():
+            if "nether_bricks" not in n:
+                continue
+            up1, up2 = (p[0], p[1] + 1, p[2]), (p[0], p[1] + 2, p[2])
+            if sight.blocks_body(snap.name(up1)) or sight.blocks_body(snap.name(up2)):
+                continue
+            d = math.dist(p, eye)
+            if not 8 <= d <= 16 or any(math.dist(p, v) < 6 for v in visited):
+                continue
+            if not snap.block_visible(eye, up1, 20.0):
+                continue
+            score = d + 4 * min((math.dist(p, v) for v in visited), default=20) / 20
+            if best is None or score > best[0]:
+                best = (score, p)
+        return best[1] if best else None
 
     def endermen(self):
         ctx = self.ctx
