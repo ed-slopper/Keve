@@ -131,8 +131,8 @@ class Provision:
                 return False  # needs mining: the caller handles it
             self.smelt("raw_iron", n)
         elif what in ("coal", "fuel"):
-            ctx.say("need fuel, getting some wood")
-            self.sub(Gather, item="wood", count=3)
+            if not self.wood_now(3, "need fuel, getting some wood"):
+                return False
         elif what.endswith("_log") or what.startswith("tag:") and "log" in what:
             ctx.say(f"need wood first, getting {n + 1} logs")
             self.sub(Gather, item="wood", count=n + 1)  # any tree; the planks follow the wood
@@ -154,6 +154,19 @@ class Provision:
             return False
         return True
 
+    def wood_now(self, n, words):
+        """Some wood, unless the last try found none it could reach (then not again for
+        ten minutes: 'need fuel, getting some wood' looped for half an hour)."""
+        if time.time() - getattr(self, "wood_failed", 0) < 600:
+            return False
+        before = self.crafter.count("log")
+        self.ctx.say(words)
+        self.sub(Gather, item="wood", count=n)
+        if self.crafter.count("log") <= before:
+            self.wood_failed = time.time()
+            return False
+        return True
+
     def smelt(self, raw, n):
         for _ in range(3):
             try:
@@ -164,7 +177,8 @@ class Provision:
                     if not self.ensure("furnace", 1):
                         return False
                 elif need.what == "fuel":
-                    self.sub(Gather, item="wood", count=3)
+                    if not self.wood_now(3, "need fuel, getting some wood"):
+                        return False
                 else:
                     return False
         return False

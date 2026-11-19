@@ -185,7 +185,8 @@ class Obsidian:
         for leg in range(4):
             if self.done():
                 return False
-            spots = self.open_water_round()
+            bad = getattr(self, "bad_water", [])
+            spots = [w for w in self.open_water_round() if not any(math.dist(w, b) < 8 for b in bad)]
             if spots:
                 w = spots[0]
                 ctx.say("I can see water over there, filling my bucket!")
@@ -194,6 +195,9 @@ class Obsidian:
                 ctx.walk_to((w[0] + 0.5, w[1] + 1, w[2] + 0.5), near=3, timeout=20, task=self.task)
                 if self.fill_water():
                     return True
+                self.bad_water = bad + [w]  # couldn't get at it: not that one again
+                journal.log("quest", "obsidian: couldn't reach that water", at=list(w))
+                continue
             # None about: off a good stretch the way he's facing, and look again.
             p = ctx.state()["player"]
             yaw = math.radians(p["yaw"] + 60 * leg)
@@ -212,6 +216,10 @@ class Obsidian:
             for b in got:
                 if b[3].startswith("minecraft:water") and b[1] <= 66 and (b[0], b[1] + 1, b[2]) not in filled:
                     water.append((b[0], b[1], b[2]))
+        # A lake or a river, not a puddle down a pit: open water with more round it.
+        cells = set(water)
+        water = [w for w in water if sum((w[0] + dx, w[1], w[2] + dz) in cells
+                                         for dx in range(-2, 3) for dz in range(-2, 3)) >= 8]
         water.sort(key=lambda p: (p[0] - x) ** 2 + (p[2] - z) ** 2)
         return water
 
