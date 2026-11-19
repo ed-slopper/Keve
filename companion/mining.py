@@ -935,8 +935,8 @@ class Mine(Task):
         staircase another way. True: carry on this way. False: this way is shut.
         A cave with the ore he's after in sight is gone into, not shut; and when he's
         digging to somewhere (to you), the cave on the way is just part of the way."""
-        if enter:
-            return True
+        if enter or getattr(self, "open_ok", False):
+            return True  # (the Nether is one big cave: across it, not boarded up)
         tunnel = {tuple(c) for c in opened} | {at, (at[0], at[1] + 1, at[2]), (at[0], at[1] + 2, at[2])}
         for p in ((self.track or {}).get("path") or []):
             p = tuple(p)

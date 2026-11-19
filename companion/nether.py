@@ -567,6 +567,7 @@ class NetherHunt:
         m.cancelled = self.task.cancelled
         m.prov = mining.Provision(ctx, m)
         m.wanted = {"gold"}
+        m.open_ok = True  # caverns are the way through here, not caves to board up
         p = ctx.state()["player"]
         m.dir = mining.DIRS[round(((p["yaw"] % 360) / 90)) % 4]
         # Level with the fortresses first.
