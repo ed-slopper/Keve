@@ -86,6 +86,14 @@ class BeatTheGame(Task):
                 return
             if name == "food" and name in q["done"] and have(ctx, *FOOD, n=2):
                 continue  # done before; he's eaten some since, but he isn't out
+            if name == "food" and name in q["done"]:
+                try:
+                    full = ctx.state()["player"].get("food", 20) >= 14
+                except Exception:
+                    full = True
+                if full:
+                    continue  # not hungry: on with the run (the animals round spawn are hunted
+                    # out; a 500-block walk for meat he doesn't need yet got the stage stuck)
             if name in ("iron", "iron gear") and "iron gear" in q["done"]:
                 continue  # done before: worn-out tools are the mining trip's business (it
                 # gets iron for a new pickaxe itself), not 13 more iron from scratch
