@@ -594,10 +594,40 @@ class NetherHunt:
             ok = m.stair_up() if y < self.FORTRESS_Y else m.stair_step()
             if not ok:
                 m.turn()
+        import life
+        known = life.load_memory().get("places", {}).get("fortress")
+        if known and math.dist(known, m.pos()) < 300:
+            # Found one before: back to it (it was 30 blocks off while he tunnelled on for
+            # half an hour without seeing it again).
+            ctx.say("back to the fortress I found!")
+            import room
+            t = room.DigTo(ctx, target=(known[0] + 0.5, known[1], known[2] + 0.5))
+            t.cancelled = self.task.cancelled
+            t.run()
+            if math.dist(known, m.pos()) < 8:
+                self.blazes(tuple(known))
         steps = 0
+        last, still = m.pos(), 0
         while not self.done() and not self.have_enough() and steps < 800:
+            if steps and steps % 20 == 0:
+                # Steps counted but going nowhere (soul sand, back and forth): straight out
+                # a good stretch the other way.
+                now = m.pos()
+                if math.dist(now, last) < 4:
+                    still += 1
+                    journal.log("quest", "nether: not getting anywhere, heading off", at=list(now))
+                    import random
+                    import room
+                    m.turn(right=random.random() < 0.5)
+                    t = room.DigTo(ctx, ahead=24)
+                    t.cancelled = self.task.cancelled
+                    t.run()
+                last = m.pos()
             fortress = self.seen("nether_bricks")
             if fortress:
+                mem = life.load_memory()
+                mem.setdefault("places", {})["fortress"] = list(fortress)
+                life.save_memory(mem)
                 journal.log("quest", "nether: found a fortress", at=list(fortress))
                 ctx.say("a nether fortress! hunting blazes.")
                 self.blazes(fortress)
