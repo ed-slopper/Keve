@@ -619,11 +619,20 @@ class BeatTheGame(Task):
             return
         if mining.underground(ctx):
             mining.go_to_surface(ctx, self)
+        import math
+        import random
+        from skills import Hunt
         self.night_hunt = True
+        heading = random.uniform(0, 2 * math.pi)
+        told = False
         try:
-            for _ in range(6):
+            for _ in range(40):
                 if self.done() or have(ctx, "ender_pearl", "ender_eye", n=12):
                     return
+                # On the surface, where they walk (a travel leg had taken him into a cave,
+                # an enderman 21 blocks off behind the rock, and the night ran out on him).
+                if mining.underground(ctx):
+                    mining.go_to_surface(ctx, self)
                 if not self.night():
                     make = getattr(ctx, "make_night", None)
                     if make:
@@ -633,8 +642,22 @@ class BeatTheGame(Task):
                         ctx.say("waiting for night: that's when the endermen are out.")
                         time.sleep(30)
                         continue
-                ctx.say("night: hunting endermen for pearls!")
-                self.hunt_for(["enderman"], "ender_pearl", 12)
+                if not told:
+                    ctx.say("night: hunting endermen for pearls!")
+                    told = True
+                men = sorted((e for e in ctx.senses.call("entities 48").get("entities", [])
+                              if e.get("type") == "minecraft:enderman"), key=lambda e: e["distance"])
+                if men:
+                    e = men[0]
+                    if e["distance"] > 10:
+                        x, y, z = e["pos"]
+                        ctx.walk_to((x, y, z), near=6, timeout=20, task=self)
+                    self.sub(Hunt, mob="enderman", count=1)
+                    ctx.collect(6, self)
+                    continue
+                pos = ctx.eye_and_view()[3]
+                heading += random.uniform(-0.7, 0.7)
+                self.travel(pos[0] + 40 * math.cos(heading), pos[2] + 40 * math.sin(heading))
         finally:
             self.night_hunt = False
 
