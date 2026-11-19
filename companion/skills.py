@@ -1567,6 +1567,18 @@ class Give(Task):
         what = self.args.get("item")  # a GATHER word, or None for everything
         exact = self.args.get("items")  # exact item ids, e.g. from mining or crafting
         import craft
+        if self.args.get("tools"):
+            # "drop me some tools": one of each kind he carries, the best of each.
+            have = ctx.counts()
+            exact = []
+            for kind in ("pickaxe", "sword", "axe", "shovel", "hoe"):
+                for mat in ("netherite", "diamond", "iron", "golden", "stone", "wooden"):
+                    if have.get(f"minecraft:{mat}_{kind}", 0):
+                        exact.append(f"minecraft:{mat}_{kind}")
+                        break
+            if not exact:
+                ctx.say("I don't have any tools on me right now.")
+                return
         if exact:
             ids = {i if ":" in i else "minecraft:" + i for i in exact}
             # A family name ("boat", "bed") means any of them: an oak boat is a boat.
@@ -1628,14 +1640,19 @@ class Give(Task):
                 ctx.body.call("move forward 0.2 --sprint")
             stuck = stuck + 1 if last_d is not None and d > last_d - 0.3 else 0
             last_d = d
-        given = 0
+        given, given_of = 0, {}
         start_counts = ctx.counts()
         total = sum(start_counts.get(i, 0) for i in items)
+        if self.args.get("count"):
+            total = min(total, int(self.args["count"]))  # "give me your pickaxe": one, not all three
+        per_item = 1 if self.args.get("tools") else None
         for item in items:
             for _ in range(40):  # one stack per drop
                 if task.done():
                     return
                 n = ctx.counts().get(item, 0)
+                if per_item and given_of.get(item, 0) >= per_item:
+                    break
                 if n <= 0 or given >= total:
                     break  # all handed over (or what's back in his pockets was picked up again)
                 o = ctx.owner() or o
@@ -1655,9 +1672,21 @@ class Give(Task):
                                       f"--near 2 --sprint --timeout 2")
                     o = ctx.owner() or o
                 ctx.body.call(f"look-at {o[1][0]:.2f} {o[1][1] + 0.1:.2f} {o[1][2]:.2f}")
+                if (ctx.slot_of(item) or 0) > 8:
+                    ctx.to_hotbar(item)
                 if not ctx.body.call(f"select {item}").get("error"):
-                    r = ctx.body.call("drop all")
-                    given += (r.get("dropped_from") or {}).get("count", 0)
+                    held = (ctx.body.call("inventory").get("held") or {}).get("count", 1)
+                    want = (per_item or total) - (given_of.get(item, 0) if per_item else given)
+                    if want < held:
+                        for _ in range(want):  # only what was asked for, one at a time
+                            if not ctx.body.call("drop").get("error"):
+                                given += 1
+                                given_of[item] = given_of.get(item, 0) + 1
+                    else:
+                        r = ctx.body.call("drop all")
+                        k = (r.get("dropped_from") or {}).get("count", 0)
+                        given += k
+                        given_of[item] = given_of.get(item, 0) + k
                     ctx.body.call("move back 0.4")  # out of reach of the stack before it can be picked up
                 else:
                     # Not on the hotbar: open the inventory, pick the stack up and close it.

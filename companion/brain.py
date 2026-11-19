@@ -107,6 +107,8 @@ def rule_route(text):
     planted = route_plant(text)
     if planted:
         return planted
+    if re.search(r"\b(give|hand|drop|toss|bring|throw)\b", text) and re.search(r"\btools\b", text):
+        return "give", {"tools": True}  # "drop me some tools": one of each he carries
     named = route_give_item(text)  # "give me the stone pickaxe": that item, not "stone"
     if named:
         return named
@@ -555,6 +557,7 @@ def named_item(text):
 
 def route_give_item(text):
     """'give me a stone pickaxe' / 'bring me a furnace': that item, got first if needed."""
+    said = text  # before typo fixing, which makes "pickaxes" "pickaxe"
     text = fix_typos(text)
     if not re.search(r"\b(give|bring|hand|toss)\b", text):
         return None
@@ -576,6 +579,9 @@ def route_give_item(text):
     if len(label.split()) < 2 and (find_item(text) or find_ore(text)):
         return None
     n = parse_count(text) if re.search(r"[0-9]|\b(two|three|four|five|six|seven|eight|nine|ten)\b", text) else None
+    plural = re.search(r"\b" + re.escape(label.split()[-1]) + r"e?s\b", said)
+    if n is None and plural:
+        return "give", {"items": [item]}  # "give me your pickaxes": all of them
     return "give", {"items": [item], "count": n or 1}
 
 
