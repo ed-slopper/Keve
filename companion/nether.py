@@ -42,7 +42,7 @@ class Obsidian:
         if not count(ctx, "diamond_pickaxe"):
             ctx.say("obsidian needs a diamond pickaxe first.")
             return False
-        for attempt in range(10):
+        for attempt in range(30):
             if self.done() or count(ctx, "obsidian") >= self.want:
                 break
             self.mine_visible()
@@ -51,7 +51,7 @@ class Obsidian:
             if not count(ctx, "water_bucket") and not self.fill_water() and not self.surface_water():
                 self.go_deep("water")
                 continue
-            if not self.pour_on_lava():
+            if not self.pour_on_lava() and not (self.approach_lava() and self.pour_on_lava()):
                 self.go_deep("lava")
         return count(ctx, "obsidian") >= self.want
 
@@ -145,6 +145,66 @@ class Obsidian:
                 journal.log("quest", "obsidian: poured water on lava", at=list(L))
                 return True
         return False
+
+    def approach_lava(self):
+        """Lava seen through the rock (a lake in a cave next to the tunnel): tunnel over to
+        it one block above its surface (lava can't climb into the tunnel), stop where the
+        floor ahead is lava, and back off two: then the shore under the tunnel mouth is a
+        bank to pour on. True when he's there."""
+        ctx = self.ctx
+        eye, snap = self.snap(10)
+        here = tuple(ctx.state()["player"]["block_pos"])
+        lava = [p for p, n in snap.blocks.items() if is_source(n, "lava")
+                and not sight.blocks_body(snap.name((p[0], p[1] + 1, p[2])))
+                and "lava" not in snap.name((p[0], p[1] + 1, p[2]))]
+        tried = getattr(self, "tried_lava", [])
+        lava = [p for p in lava if not any(math.dist(p, t) < 4 for t in tried)]
+        if not lava:
+            return False
+        L = min(lava, key=lambda p: math.dist(p, here))
+        self.tried_lava = tried + [L]
+        dx, dz = here[0] - L[0], here[2] - L[2]
+        d = (1 if dx > 0 else -1, 0) if abs(dx) >= abs(dz) else (0, 1 if dz > 0 else -1)
+        y = L[1] + 1
+        journal.log("quest", "obsidian: tunnelling over to lava", lava=list(L))
+        ctx.say("lava through the rock there: tunnelling over to it, carefully.")
+        import room
+        start = (L[0] + 3 * d[0], y, L[2] + 3 * d[1])
+        t = room.DigTo(ctx, target=(start[0] + 0.5, y, start[2] + 0.5))
+        t.cancelled = self.task.cancelled
+        t.run()
+        me = tuple(ctx.state()["player"]["block_pos"])
+        if math.dist(me, start) > 1.5:
+            return False
+        ctx.body.call(f"goto {start[0] + 0.5:.2f} {y:.2f} {start[2] + 0.5:.2f} --near 0.4 --timeout 4")
+        step = (-d[0], -d[1])  # toward the lava
+        ctx.select_best(["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe"])
+        for _ in range(4):
+            if self.done():
+                return False
+            me = tuple(ctx.state()["player"]["block_pos"])
+            front = (me[0] + step[0], me[1], me[2] + step[1])
+            _, s = self.snap(4)
+            if "lava" in s.name((front[0], front[1] - 1, front[2])):
+                break  # the edge: the lake starts under the next block
+            if "lava" in s.name(front) or "lava" in s.name((front[0], front[1] + 1, front[2])):
+                return False  # lava at his own level: not this way
+            for c in ((front[0], front[1] + 1, front[2]), front):
+                if sight.blocks_body(s.name(c)):
+                    ctx.body.call(f"look-at block {c[0]} {c[1]} {c[2]}")
+                    ctx.body.call(f"break {c[0]} {c[1]} {c[2]} --timeout 12")
+            time.sleep(0.3)
+            _, s = self.snap(4)
+            if "lava" in s.name((front[0], front[1] - 1, front[2])):
+                break  # opened onto the lake: stay back, the shore is right here
+            ctx.body.call(f"goto {front[0] + 0.5:.2f} {front[1]:.2f} {front[2] + 0.5:.2f} --near 0.4 --timeout 3 --direct")
+        else:
+            return False
+        # Back two from the edge (the pour spot must keep clear of the lava).
+        me = tuple(ctx.state()["player"]["block_pos"])
+        back = (me[0] - step[0] * 2, me[1], me[2] - step[1] * 2)
+        ctx.body.call(f"goto {back[0] + 0.5:.2f} {back[1]:.2f} {back[2] + 0.5:.2f} --near 0.5 --timeout 4")
+        return True
 
     def safe_spot(self, snap, target, lava):
         """Where to stand to pour on `target`: solid floor, room for a body, in reach of it,
