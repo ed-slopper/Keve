@@ -49,10 +49,10 @@ class Obsidian:
             if count(ctx, "obsidian") >= self.want:
                 break
             if not count(ctx, "water_bucket") and not self.fill_water():
-                self.look_elsewhere("water")
+                self.go_deep("water")
                 continue
             if not self.pour_on_lava():
-                self.look_elsewhere("lava")
+                self.go_deep("lava")
         return count(ctx, "obsidian") >= self.want
 
     # --- the pieces ------------------------------------------------------------------
@@ -123,6 +123,13 @@ class Obsidian:
                     continue
                 ctx.body.call(f"goto {stand[0] + 0.5:.2f} {stand[1]:.2f} {stand[2] + 0.5:.2f} --near 0.6 --timeout 15")
                 me = ctx.state()["player"]["block_pos"]
+                if math.dist(me, stand) > 1.5 and math.dist(me, stand) < 24:
+                    # Seen through the rock from the tunnel: dig over to it.
+                    import room
+                    t = room.DigTo(ctx, target=(stand[0] + 0.5, stand[1], stand[2] + 0.5))
+                    t.cancelled = self.task.cancelled
+                    t.run()
+                    me = ctx.state()["player"]["block_pos"]
                 if math.dist(me, stand) > 1.5:
                     continue
                 ctx.say("pouring water on the lava for obsidian!")
@@ -162,6 +169,41 @@ class Obsidian:
                     if best is None or d < best[0]:
                         best = (d, c)
         return best[1] if best else None
+
+    def worth_a_look(self):
+        """Down a mine: stop for what obsidian needs. Obsidian already there; a water source
+        while he has no water; lava open on top once he has water."""
+        ctx = self.ctx
+        self._looks = getattr(self, "_looks", 0) + 1
+        if self._looks % 2:
+            return False  # every other step (a snapshot each time)
+        eye, snap = self.snap(8)
+        water = count(ctx, "water_bucket")
+        for p, n in snap.blocks.items():
+            if base(n) == "minecraft:obsidian":
+                return True
+            if not water and is_source(n, "water"):
+                return True
+            if water and is_source(n, "lava"):
+                above = snap.name((p[0], p[1] + 1, p[2]))
+                if not sight.blocks_body(above) and "lava" not in above:
+                    return True
+        return False
+
+    def go_deep(self, what):
+        """Nothing in sight: down to the bottom of the world, where lava lakes and the water
+        of the aquifers are everywhere (a mountain top has neither), branch mining until
+        one is in sight, and stay there."""
+        import mining
+        ctx = self.ctx
+        journal.log("quest", f"obsidian: no {what} in sight, going deep")
+        if ctx.state()["player"]["block_pos"][1] > -30:
+            ctx.say(f"no {what} up here: down to the bottom, where the lava lakes are.")
+        m = mining.Mine(ctx, ore="diamond", count=99)
+        m.cancelled = self.task.cancelled
+        m.stay_down = True
+        m.stop_when = self.worth_a_look
+        m.run()
 
     def look_elsewhere(self, what):
         """Nothing in sight: tunnel on a stretch and look again (lava lakes are common at the

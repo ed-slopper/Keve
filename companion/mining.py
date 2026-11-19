@@ -593,6 +593,9 @@ class Mine(Task):
     def check_finished(self):
         if self.done() or getattr(self, "fell", False):
             return True
+        stop_when = getattr(self, "stop_when", None)
+        if stop_when is not None and stop_when():
+            return True  # what the caller came down for is in sight (obsidian: lava, water)
         self._checks = getattr(self, "_checks", 0) + 1
         if self._checks % 2 == 0:
             return False  # the heavier checks below every other step
@@ -1271,8 +1274,8 @@ class Mine(Task):
     def wrap_up(self, ore):
         ctx = self.ctx
         got = self.have() - self.start_have
-        if self.done():
-            return
+        if self.done() or getattr(self, "stay_down", False):
+            return  # the caller has work for him down here
         ctx.say(f"got {got} {ore}! heading back up." if got else f"no {ore} this time, heading back up.")
         # Back up the staircase (1-block steps, so the path planner can walk it).
         for _ in range(30):
