@@ -48,6 +48,9 @@ class BeatTheGame(Task):
             ("iron gear", lambda: have(c, "iron_pickaxe", "diamond_pickaxe") and have(c, "iron_sword", "diamond_sword")
                 and have(c, "bucket", "water_bucket", "lava_bucket") and self.has_shield(), self.iron_gear),
             ("diamonds", lambda: have(c, "diamond_pickaxe"), self.diamonds),  # the sword is a bonus
+            # Armour before the Nether: bare, a ghast's fireball knocked him off a ledge into
+            # the lava and piglins took him apart in seconds. (His head slot is his robot head.)
+            ("armor", lambda: wearing(c, "chestplate"), self.armor),
             ("obsidian", lambda: have(c, "obsidian", n=10) or self.flag("portal"), self.obsidian),
             ("nether portal", lambda: self.flag("portal"), self.nether_portal),
             ("blaze rods", lambda: c.counts().get("minecraft:blaze_rod", 0) + c.counts().get("minecraft:blaze_powder", 0) // 2
@@ -415,9 +418,48 @@ class BeatTheGame(Task):
         """Right-click armour in hand to put it on, like a player."""
         if wearing(self.ctx, item.split("_")[-1]) or not have(self.ctx, item):
             return
+        self.ctx.to_hotbar(f"minecraft:{item}")
         self.ctx.body.call(f"select minecraft:{item}")
         self.ctx.body.call("use-item")
         time.sleep(0.3)
+
+    def armor(self):
+        """A chestplate (diamond from the spare diamonds, else iron), and leggings and boots
+        if the makings are there; put on."""
+        import life as _life
+        import mining
+        c = self.ctx.counts()
+        diamonds = c.get("minecraft:diamond", 0)
+        iron = c.get("minecraft:iron_ingot", 0) + c.get("minecraft:raw_iron", 0)
+        if not have(self.ctx, "diamond_chestplate", "iron_chestplate"):
+            if diamonds >= 8:
+                piece = "diamond_chestplate"
+            else:
+                piece = "iron_chestplate"
+                if iron < 8:
+                    self.ctx.say("getting iron for a chestplate: no armour is how I keep dying.")
+                    self.sub(mining.Mine, ore="iron", count=8 - iron)
+                    if self.done():
+                        return
+            self.sub(_life.Sequence, steps=[("craft", {"item": piece, "count": 1})])
+        # The rest with what's left over.
+        c = self.ctx.counts()
+        extra = []
+        for part, d_cost, i_cost in (("boots", 4, 4), ("leggings", 7, 7)):
+            if have(self.ctx, f"diamond_{part}", f"iron_{part}") or wearing(self.ctx, part):
+                continue
+            if c.get("minecraft:diamond", 0) >= d_cost:
+                extra.append(("craft", {"item": f"diamond_{part}", "count": 1}))
+                c["minecraft:diamond"] = c.get("minecraft:diamond", 0) - d_cost
+            elif c.get("minecraft:iron_ingot", 0) + c.get("minecraft:raw_iron", 0) >= i_cost:
+                extra.append(("craft", {"item": f"iron_{part}", "count": 1}))
+        if extra:
+            self.sub(_life.Sequence, steps=extra)
+        for piece in ("diamond_chestplate", "iron_chestplate", "diamond_leggings", "iron_leggings",
+                      "diamond_boots", "iron_boots"):
+            self.wear(piece)
+        if wearing(self.ctx, "chestplate"):
+            self.ctx.say("suited up!")
 
     def diamonds(self):
         import life as _life
