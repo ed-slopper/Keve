@@ -412,8 +412,22 @@ class Ctx:
     def hide(self, task):
         """Two blocks down, a block over the head, eat, and wait to heal (or for the mobs to
         go); then out again. On the surface or in a tunnel alike."""
-        self.say("ouch, I'm hurt! hiding to heal up.")
         x, y, z = self.state()["player"]["block_pos"]
+        near = self.senses.call(f"blocks {x - 2} {y - 3} {z - 2} {x + 2} {y + 1} {z + 2}").get("blocks", [])
+        if any("water" in b[3] or "lava" in b[3] for b in near):
+            # By a lake: a hole here fills with water and drowns him (it did). Get away
+            # from the water first, then dig in.
+            self.say("ouch, I'm hurt! away from the water first.")
+            p = self.state()["player"]
+            yaw = math.radians(p["yaw"] + 180)
+            pos = p["position"]
+            self.body.call(f"goto {pos[0] - math.sin(yaw) * 8:.1f} {pos[1]:.1f} {pos[2] + math.cos(yaw) * 8:.1f} "
+                           f"--near 3 --timeout 6 --sprint")
+            x, y, z = self.state()["player"]["block_pos"]
+            near = self.senses.call(f"blocks {x - 2} {y - 3} {z - 2} {x + 2} {y + 1} {z + 2}").get("blocks", [])
+            if any("water" in b[3] or "lava" in b[3] for b in near):
+                return  # still wet all round: fight on instead
+        self.say("ouch, I'm hurt! hiding to heal up.")
         for c in ((x, y - 1, z), (x, y - 2, z), (x, y - 3, z)):  # three: the lid needs ground round it
             n = self.senses.call(f"blocks {c[0]} {c[1]} {c[2]} {c[0]} {c[1]} {c[2]}").get("blocks", [])
             if n and sight.blocks_body(n[0][3]) and not any(u in n[0][3] for u in ("bedrock", "lava", "water")):
