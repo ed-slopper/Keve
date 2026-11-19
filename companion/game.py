@@ -418,9 +418,19 @@ class BeatTheGame(Task):
         """Right-click armour in hand to put it on, like a player."""
         if wearing(self.ctx, item.split("_")[-1]) or not have(self.ctx, item):
             return
-        self.ctx.to_hotbar(f"minecraft:{item}")
-        self.ctx.body.call(f"select minecraft:{item}")
-        self.ctx.body.call("use-item")
+        # Shift-click it in the inventory: it goes to its armour slot. (Right-clicking it in
+        # hand ran into the inventory screen still being open and did nothing.)
+        b = self.ctx.body
+        b.call("close")
+        time.sleep(0.3)
+        slot = self.ctx.slot_of(f"minecraft:{item}")
+        if slot is None:
+            return
+        b.call("open-inventory")
+        time.sleep(0.4)
+        b.call(f"click-slot {slot} shift")
+        time.sleep(0.3)
+        b.call("close")
         time.sleep(0.3)
 
     def armor(self):
