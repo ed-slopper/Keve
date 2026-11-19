@@ -649,6 +649,8 @@ class NetherHunt:
         for _ in range(80):
             if self.done():
                 return False
+            if self.task.guard(owner_radius=0.0, self_radius=6.0):
+                continue
             here = m.pos()
             if math.dist(here, target) < 6:
                 return True
@@ -690,16 +692,21 @@ class NetherHunt:
             if self.task.guard(owner_radius=0.0, self_radius=6.0):
                 continue
             ctx.maybe_eat(below=19)
-            fought = False
-            for e in ctx.senses.call("entities 20").get("entities", []):
-                if e.get("type") == "minecraft:blaze" and (e.get("health") or 1) > 0:
-                    ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
-                    ctx.hunt(e["id"], 15.0, self.task)
-                    fought = True
-                    break
-            if fought:
+            blazes = sorted((e for e in ctx.senses.call("entities 48").get("entities", [])
+                             if e.get("type") == "minecraft:blaze" and (e.get("health") or 1) > 0),
+                            key=lambda e: e["distance"])
+            if blazes and blazes[0]["distance"] <= 16:
+                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.hunt(blazes[0]["id"], 15.0, self.task)
                 time.sleep(0.4)
                 ctx.collect(8, self.task)
+                continue
+            if blazes:
+                # Shooting at him from across the fortress (they did, from 37 blocks, and he
+                # stood there): over to them, where their spawner is.
+                b = blazes[0]["pos"]
+                journal.log("quest", "nether: blazes over there", at=[round(v) for v in b])
+                self.go_toward(m, (round(b[0]), round(b[1]) - 2, round(b[2])))
                 continue
             spawner = self.seen("spawner", r=16)
             if spawner:

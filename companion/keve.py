@@ -670,7 +670,46 @@ class Keve:
                         threading.Timer(4.0, lambda r=resume, w=where, c=ev.get("cause") or "": self.start_task(
                             "recover", {"where": w, "resume": r, "cause": c})).start()
             last = max(last, r.get("last", last))
+            self.check_ghost()
             time.sleep(0.25)
+
+
+def _check_ghost(self):
+    """Dead with no death screen (health 0, the death event never came): he lay in the
+    lava ten minutes like that, twice. Respawn; refused, leave and join again."""
+    now = time.time()
+    if now - getattr(self, "_ghost_checked", 0) < 2:
+        return
+    self._ghost_checked = now
+    try:
+        hp = self.ctrl.call("state")["player"].get("health", 20)
+    except Exception:
+        return
+    if hp > 0:
+        self._ghost_since = None
+        return
+    if getattr(self, "_ghost_since", None) is None:
+        self._ghost_since = now
+        return
+    if now - self._ghost_since < 10:
+        return
+    journal.log("note", "dead but no death screen: rejoining")
+    self._ghost_since = None
+    try:
+        self.ctrl.call("respawn")
+        return
+    except CtlError:
+        pass
+    try:
+        raw = self.ctrl._conn  # leaving and joining are the client's, not a player action
+        raw.call("disconnect")
+        time.sleep(3)
+        raw.call(f"connect 127.0.0.1:{getattr(self.args, 'port', 25565)} {self.name}")
+    except CtlError as e:
+        journal.log("note", "rejoin failed", error=str(e)[:120])
+
+
+Keve.check_ghost = _check_ghost
 
 
 def main():
