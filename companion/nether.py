@@ -48,7 +48,7 @@ class Obsidian:
             self.mine_visible()
             if count(ctx, "obsidian") >= self.want:
                 break
-            if not count(ctx, "water_bucket") and not self.fill_water():
+            if not count(ctx, "water_bucket") and not self.fill_water() and not self.surface_water():
                 self.go_deep("water")
                 continue
             if not self.pour_on_lava():
@@ -169,6 +169,39 @@ class Obsidian:
                     if best is None or d < best[0]:
                         best = (d, c)
         return best[1] if best else None
+
+    def surface_water(self):
+        """Water's for the surface: a lake, a river, the sea (55 minutes at the bottom of
+        the world near spawn found lava but never water). Up, then to the nearest open
+        water in sight of the land round about, and fill the bucket there."""
+        import mining
+        ctx = self.ctx
+        if not count(ctx, "bucket"):
+            return False
+        if mining.underground(ctx):
+            mining.go_to_surface(ctx, self.task)
+            if self.done():
+                return False
+        for leg in range(4):
+            if self.done():
+                return False
+            r = ctx.senses.call("find-block minecraft:water 64")
+            here = ctx.eye_and_view()[3]
+            spots = [tuple(n["pos"]) for n in r.get("nearest", []) if n["pos"][1] >= 55]
+            if spots:
+                w = spots[0]
+                ctx.say("I can see water over there, filling my bucket!")
+                journal.log("quest", "obsidian: walking to water", at=list(w))
+                self.task.travel(w[0] + 0.5, w[2] + 0.5)
+                ctx.walk_to((w[0] + 0.5, w[1] + 1, w[2] + 0.5), near=3, timeout=20, task=self.task)
+                if self.fill_water():
+                    return True
+            # None about: off a good stretch the way he's facing, and look again.
+            p = ctx.state()["player"]
+            yaw = math.radians(p["yaw"] + 60 * leg)
+            pos = p["position"]
+            self.task.travel(pos[0] - math.sin(yaw) * 80, pos[2] + math.cos(yaw) * 80)
+        return False
 
     def worth_a_look(self):
         """Down a mine: stop for what obsidian needs. Obsidian already there; a water source
