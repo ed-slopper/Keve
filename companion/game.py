@@ -83,6 +83,9 @@ class BeatTheGame(Task):
                 return
             if name == "food" and name in q["done"] and have(ctx, *FOOD, n=2):
                 continue  # done before; he's eaten some since, but he isn't out
+            if name in ("iron", "iron gear") and "iron gear" in q["done"]:
+                continue  # done before: worn-out tools are the mining trip's business (it
+                # gets iron for a new pickaxe itself), not 13 more iron from scratch
             if check():
                 if name not in q["done"]:
                     q["done"].append(name)

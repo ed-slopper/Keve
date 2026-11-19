@@ -283,14 +283,14 @@ class Ctx:
                 self.place(mouth, "minecraft:" + item)
                 return
 
-    def drop_junk(self, keep_cobble=64):
+    def drop_junk(self, keep_cobble=64, min_slots=30):
         """When the inventory is getting full, throw out what isn't worth carrying (see
         KEEP_WORDS): each junk stack is put in the last hotbar slot and thrown with Q, like a
         player clearing his pockets. (Clicking stacks out of the screen one after another
         was too quick for the game: one stack in five went.)"""
         inv = self.body.call("inventory")
         slots = [s for s in inv.get("hotbar", []) + inv.get("main", []) if s.get("item")]
-        if len(slots) < 30:
+        if len(slots) < min_slots:
             return
         self.body.call("close")  # a furnace or chest left open would take the clicks
         pit = self.junk_pit()
@@ -341,14 +341,19 @@ class Ctx:
                 self.aim_pit()
             else:
                 self.body.call("move back 0.25")
+        landed = []
         if pit:
             time.sleep(1.0)  # all of it down the hole before the lid goes on
+            me = self.state()["player"]["position"]
+            landed = [[round(e["pos"][i] - me[i], 1) for i in range(3)]
+                      for e in self.senses.call("entities 5").get("entities", []) if e.get("kind") == "item"][:6]
             self.seal_pit(pit)
         now = self.body.call("inventory")
         after = [s for s in now.get("hotbar", []) + now.get("main", []) if s.get("item")]
         import journal
         journal.log("note", f"dropped junk: {len(slots)} slots -> {len(after)}", pit=bool(pit), thrown=thrown[:8], failed=failed[:6],
-                    left=sorted({x["item"][10:] for x in after} & set(thrown)))
+                    left=sorted({x["item"][10:] for x in after} & set(thrown)),
+                    pit_at=list(pit) if pit else None, landed=landed)
 
     # --- ground where breaking doesn't stick (spawn protection, a claim) --------------
     def block_came_back(self, p, ok):
