@@ -625,6 +625,7 @@ class BeatTheGame(Task):
         self.night_hunt = True
         heading = random.uniform(0, 2 * math.pi)
         told = False
+        skip = set()
         try:
             for _ in range(40):
                 if self.done() or have(ctx, "ender_pearl", "ender_eye", n=12):
@@ -646,14 +647,19 @@ class BeatTheGame(Task):
                     ctx.say("night: hunting endermen for pearls!")
                     told = True
                 men = sorted((e for e in ctx.senses.call("entities 48").get("entities", [])
-                              if e.get("type") == "minecraft:enderman"), key=lambda e: e["distance"])
+                              if e.get("type") == "minecraft:enderman" and e.get("id") not in skip),
+                             key=lambda e: e["distance"])
                 if men:
                     e = men[0]
                     if e["distance"] > 10:
                         x, y, z = e["pos"]
                         ctx.walk_to((x, y, z), near=6, timeout=20, task=self)
+                    before = ctx.counts().get("minecraft:ender_pearl", 0)
+                    said = len(getattr(ctx, "said_log", []))
                     self.sub(Hunt, mob="enderman", count=1)
                     ctx.collect(6, self)
+                    if any("don't see" in t for t in getattr(ctx, "said_log", [])[said:]) and                             ctx.counts().get("minecraft:ender_pearl", 0) <= before:
+                        skip.add(e.get("id"))  # one in a cave below, out of sight: not that one again
                     continue
                 pos = ctx.eye_and_view()[3]
                 heading += random.uniform(-0.7, 0.7)
