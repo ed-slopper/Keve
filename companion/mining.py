@@ -1422,4 +1422,11 @@ def walk_to_daylight(ctx, task):
     import journal
     journal.log("note", "big open cave: walking to daylight", at=list(c))
     r = ctx.walk_to((c[0] + 0.5, c[1], c[2] + 0.5), near=2, timeout=30, task=task)
-    return bool(r.get("arrived")) or not underground(ctx)
+    if not r.get("arrived") and underground(ctx):
+        # Up a ledge he can't walk (an overhang in a mountain, the sky 4 blocks up and
+        # 5 over: an hour of walking at it and boarding up the cave): dig to it.
+        import room
+        t = room.DigTo(ctx, target=(c[0] + 0.5, c[1], c[2] + 0.5))
+        t.cancelled = task.cancelled
+        t.run()
+    return not underground(ctx)
