@@ -654,7 +654,14 @@ class NetherHunt:
             here = m.pos()
             if math.dist(here, target) < 6:
                 return True
-            r = ctx.walk_to((target[0] + 0.5, target[1], target[2] + 0.5), near=3, timeout=8, task=self.task)
+            # Blazes about: shield up while walking (out on a bridge over the cavern their
+            # fireballs set him alight four times running).
+            shield = self.shield_up()
+            try:
+                r = ctx.walk_to((target[0] + 0.5, target[1], target[2] + 0.5), near=3, timeout=8, task=self.task)
+            finally:
+                if shield:
+                    ctx.body.call("mouse right up")
             if r.get("arrived"):
                 return True
             dx, dz = target[0] - here[0], target[2] - here[2]
@@ -667,6 +674,19 @@ class NetherHunt:
                 m.turn()
                 m.tunnel_step()
         return math.dist(m.pos(), target) < 6
+
+    def shield_up(self):
+        """Blazes within 40 and the shield in the off hand: hold it up (right button with a
+        sword in hand). True when it's up."""
+        ctx = self.ctx
+        off = ctx.body.call("inventory").get("offhand") or {}
+        if "shield" not in str(off.get("item") if isinstance(off, dict) else off):
+            return False
+        if not any(e.get("type") == "minecraft:blaze" for e in ctx.senses.call("entities 40").get("entities", [])):
+            return False
+        ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+        ctx.body.call("mouse right down")
+        return True
 
     def seen(self, word, r=16):
         eye = tuple(self.ctx.state()["player"]["eye"])
