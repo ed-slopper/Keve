@@ -742,8 +742,22 @@ class Ctx:
         r = self.senses.call(f"blocks {x} {y - 1} {z} {x} {y + 1} {z}")
         hot = [b for b in r.get("blocks", []) if any(h in b[3] for h in ("minecraft:lava", "fire"))]
         if hot:
-            self.body.call("move back 0.6 --sprint --jump")
-            self.body.call("move left 0.4 --jump")
+            # To a spot beside him with floor under it and no fire (a blind step back off a
+            # Nether ledge dropped him into the lava sea).
+            snap = sight.Snapshot.read(self.senses, (x, y, z), rh=3, rv=3)
+            spots = []
+            for dx in range(-3, 4):
+                for dz in range(-3, 4):
+                    for dy in (0, 1, -1):
+                        c = (x + dx, y + dy, z + dz)
+                        floor, a, b = snap.name((c[0], c[1] - 1, c[2])), snap.name(c), snap.name((c[0], c[1] + 1, c[2]))
+                        if sight.blocks_body(floor) and not sight.is_fluid(floor) and "magma" not in floor                                 and not sight.blocks_body(a) and not sight.blocks_body(b)                                 and not any(h in a + b for h in ("lava", "fire")) and (dx, dz) != (0, 0):
+                            spots.append(c)
+            if spots:
+                c = min(spots, key=lambda c: math.dist(c, (x, y, z)))
+                self.body.call(f"goto {c[0] + 0.5:.2f} {c[1]:.2f} {c[2] + 0.5:.2f} --near 0.4 --timeout 2 --direct --sprint")
+            else:
+                self.body.call("jump")
             return True
         return self.get_down_from_tree(p)
 
@@ -881,6 +895,13 @@ class Task:
             return True
         o = ctx.owner()
         _, _, _, pos = ctx.eye_and_view()
+        # A ghast's fireball coming at him: a swing knocks it back (fireballs from across a
+        # Nether cavern burned him and set the ground alight under him, again and again).
+        for f in ctx.senses.call("entities 6").get("entities", []):
+            if f.get("type") in ("minecraft:fireball",) and f.get("distance", 99) < 5:
+                ctx.body.call(f"look-at entity {f['id']}")
+                ctx.body.call(f"attack {f['id']}")
+                return True
         targets = ctx.visible_hostiles(pos, self_radius)
         if o:
             targets += ctx.visible_hostiles(o[1], owner_radius)
