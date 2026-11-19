@@ -130,7 +130,18 @@ class Provision:
             if raw < n:
                 return False  # needs mining: the caller handles it
             self.smelt("raw_iron", n)
-        elif what in ("coal", "fuel"):
+        elif what == "coal":
+            # Coal for torches: wood smelted into charcoal (wood alone isn't coal: getting
+            # wood again and again for it looped).
+            logs = 2 * n + 1  # n to smelt, the rest burns
+            if self.crafter.count("log") < logs and \
+                    not self.wood_now(logs - self.crafter.count("log"), "need coal: getting wood for charcoal"):
+                return False
+            if self.crafter.count("log") < n + 1:
+                return False
+            ctx.say(f"smelting {n} charcoal for torches.")
+            return self.smelt("log", n)
+        elif what == "fuel":
             if not self.wood_now(3, "need fuel, getting some wood"):
                 return False
         elif what.endswith("_log") or what.startswith("tag:") and "log" in what:
