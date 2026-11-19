@@ -600,10 +600,7 @@ class NetherHunt:
             # Found one before: back to it (it was 30 blocks off while he tunnelled on for
             # half an hour without seeing it again).
             ctx.say("back to the fortress I found!")
-            import room
-            t = room.DigTo(ctx, target=(known[0] + 0.5, known[1], known[2] + 0.5))
-            t.cancelled = self.task.cancelled
-            t.run()
+            self.go_toward(m, known)
             if math.dist(known, m.pos()) < 8:
                 self.blazes(tuple(known))
         steps = 0
@@ -619,9 +616,9 @@ class NetherHunt:
                     import random
                     import room
                     m.turn(right=random.random() < 0.5)
-                    t = room.DigTo(ctx, ahead=24)
-                    t.cancelled = self.task.cancelled
-                    t.run()
+                    for _ in range(24):
+                        if self.done() or not m.tunnel_step():
+                            break
                 last = m.pos()
             fortress = self.seen("nether_bricks")
             if fortress:
@@ -642,6 +639,31 @@ class NetherHunt:
             if steps % 40 == 0:
                 journal.log("quest", f"nether: tunnelled {steps} blocks", at=list(m.pos()))
         return self.have_enough()
+
+    def go_toward(self, m, target):
+        """Over to a spot in the Nether: walked where the planner finds a way (it keeps off
+        lava and big drops), else tunnel steps toward it, which check the floor (a dig
+        straight at it opened onto a cavern and he walked off into the lava sea, twice)."""
+        ctx = self.ctx
+        for _ in range(80):
+            if self.done():
+                return False
+            here = m.pos()
+            if math.dist(here, target) < 6:
+                return True
+            r = ctx.walk_to((target[0] + 0.5, target[1], target[2] + 0.5), near=3, timeout=8, task=self.task)
+            if r.get("arrived"):
+                return True
+            dx, dz = target[0] - here[0], target[2] - here[2]
+            m.dir = ((1 if dx > 0 else -1), 0) if abs(dx) >= abs(dz) else (0, (1 if dz > 0 else -1))
+            if abs(target[1] - here[1]) > 2:
+                ok = m.stair_up() if target[1] > here[1] else m.stair_step()
+            else:
+                ok = m.tunnel_step()
+            if not ok:
+                m.turn()
+                m.tunnel_step()
+        return math.dist(m.pos(), target) < 6
 
     def seen(self, word, r=16):
         eye = tuple(self.ctx.state()["player"]["eye"])
