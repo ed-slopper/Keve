@@ -641,6 +641,9 @@ def main():
                                    capture_output=True, creationflags=NO_WINDOW)) if args.keep_inventory else None,
                                skip_night=(lambda: subprocess.run(
                                    [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set day"],
+                                   capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None,
+                               make_night=(lambda: subprocess.run(
+                                   [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set 14000"],
                                    capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None)
     if ears != "off" or mouth != "off":
         print(f"Voice: {ears} ears, {mouth} voice. " + ("Say 'Keve, follow me'." if ears != "off" else

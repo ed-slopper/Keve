@@ -121,7 +121,7 @@ class BeatTheGame(Task):
                 try:
                     do()
                 except Exception as e:  # a skill crashing is a thing to fix: write it down
-                    if "isn't in the world" in str(e) and waits < 5:
+                    if ("isn't in the world" in str(e) or "no world open" in str(e)) and waits < 5:
                         waits += 1
                         # Between worlds (a portal, a reconnect): wait for the world to load,
                         # it isn't a failed try (two were gone in two seconds).
@@ -239,6 +239,8 @@ class BeatTheGame(Task):
         ctx = self.ctx
         if not self.night():
             return
+        if getattr(self, "night_hunt", False):
+            return  # out on purpose: endermen only walk the overworld at night
         skip = getattr(ctx, "skip_night", None)
         if skip:  # training with nights skipped (Keve.bat --skip-nights): straight to morning
             journal.log("quest", "night: skipped (training)")
@@ -609,10 +611,32 @@ class BeatTheGame(Task):
         nether.NetherHunt(self, rods=6, pearls=0).run()
 
     def ender_pearls(self):
-        import nether
-        if not self.to_nether():
+        """Endermen walk the overworld at night: hunted there, on open ground, not across
+        the Nether's lava caverns (the way to the fortress killed him again and again)."""
+        import mining
+        ctx = self.ctx
+        if not self.to_overworld():
             return
-        nether.NetherHunt(self, rods=0, pearls=12).run()
+        if mining.underground(ctx):
+            mining.go_to_surface(ctx, self)
+        self.night_hunt = True
+        try:
+            for _ in range(6):
+                if self.done() or have(ctx, "ender_pearl", "ender_eye", n=12):
+                    return
+                if not self.night():
+                    make = getattr(ctx, "make_night", None)
+                    if make:
+                        make()  # training: no waiting ten minutes for dusk
+                        time.sleep(1)
+                    else:
+                        ctx.say("waiting for night: that's when the endermen are out.")
+                        time.sleep(30)
+                        continue
+                ctx.say("night: hunting endermen for pearls!")
+                self.hunt_for(["enderman"], "ender_pearl", 12)
+        finally:
+            self.night_hunt = False
 
     def eyes(self):
         import mining
