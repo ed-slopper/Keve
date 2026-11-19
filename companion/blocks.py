@@ -89,7 +89,7 @@ class BreakBlocks(Task):
         done = 0
         endless = self.args.get("endless")
         explores = 0
-        skip = set()  # blocks that couldn't be broken from here: not tried again
+        skip = {tuple(p) for p in self.args.get("skip", ())}  # couldn't be broken from here, or the caller says not
         if tool in TOOLS:
             ctx.select_best(TOOLS[tool])
         while done < want and not self.done():

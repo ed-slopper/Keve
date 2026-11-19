@@ -64,9 +64,14 @@ class Obsidian:
         """Obsidian already there (from a pour, or a lake that met water): mine it."""
         import blocks
         eye, snap = self.snap()
-        if not any(base(n) == "minecraft:obsidian" for n in snap.blocks.values()):
+        obs = [p for p, n in snap.blocks.items() if base(n) == "minecraft:obsidian"]
+        # Over lava, a broken obsidian's drop falls in and burns (and walking out on the lake
+        # to it killed him): only ones with solid ground under them.
+        unsafe = [p for p in obs if not sight.blocks_body(snap.name((p[0], p[1] - 1, p[2])))
+                  or sight.is_fluid(snap.name((p[0], p[1] - 1, p[2])))]
+        if len(unsafe) == len(obs):
             return
-        t = blocks.BreakBlocks(self.ctx, ids=["minecraft:obsidian"], label="obsidian",
+        t = blocks.BreakBlocks(self.ctx, ids=["minecraft:obsidian"], label="obsidian", skip=unsafe,
                                count=self.want - count(self.ctx, "obsidian"), near_owner=False)
         t.cancelled = self.task.cancelled
         t.run()
@@ -109,7 +114,9 @@ class Obsidian:
             return sight.blocks_body(snap.name(p))
         lava = [p for p, n in snap.blocks.items() if is_source(n, "lava")
                 and not solid((p[0], p[1] + 1, p[2])) and "lava" not in snap.name((p[0], p[1] + 1, p[2]))]
-        lava.sort(key=lambda p: math.dist(p, eye))
+        # Shallow lava first (solid under it): the obsidian it turns into can be mined
+        # without the drop falling into the lake.
+        lava.sort(key=lambda p: (not solid((p[0], p[1] - 1, p[2])), math.dist(p, eye)))
         for L in lava[:8]:
             if self.done():
                 return False
@@ -171,7 +178,7 @@ class Obsidian:
         lava = [p for p in lava if not any(math.dist(p, t) < 4 for t in tried)]
         if not lava:
             return False
-        L = min(lava, key=lambda p: math.dist(p, here))
+        L = min(lava, key=lambda p: (not sight.blocks_body(snap.name((p[0], p[1] - 1, p[2]))), math.dist(p, here)))
         self.tried_lava = tried + [L]
         dx, dz = here[0] - L[0], here[2] - L[2]
         d = (1 if dx > 0 else -1, 0) if abs(dx) >= abs(dz) else (0, 1 if dz > 0 else -1)
