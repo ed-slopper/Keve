@@ -41,7 +41,17 @@ One limit: the game can't be sped up. His client runs at 20 ticks a second.
 - Fights at the fortress: wither skeletons plus blazes beat him even with a diamond sword,
   a diamond chestplate and the shield.
 
-## Where training stopped (2026-11-19, about 08:00)
+## Where training stopped (2026-11-19, about 18:30)
+
+Later the same day, grinding on (deaths keep items in training): all 6 blaze rods (about 5
+hours of dying and retrying at the spawner), then the ender pearl stage: about 3 hours hunting
+endermen in the overworld at night, 0 pearls. Endermen are sparse, he keeps ending up in caves
+where they're out of sight, and at night with no armour he's mobbed and dies within seconds.
+Next for pearls: stay on open surface ground at night, armour that lasts, or another source
+(piglin bartering with gold, or endermen in a warped forest). Then eyes of ender, bow and
+arrows, stronghold and the dragon, none of which have run yet.
+
+## Earlier stop (2026-11-19, about 08:00)
 
 Done in training: stone tools, food, iron, iron gear, diamonds (diamond pickaxe and sword),
 armor (diamond chestplate), obsidian, nether portal (built, lit, through). In the Nether he
