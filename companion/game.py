@@ -652,8 +652,17 @@ class BeatTheGame(Task):
                 if men:
                     e = men[0]
                     if e["distance"] > 10:
-                        x, y, z = e["pos"]
-                        ctx.walk_to((x, y, z), near=6, timeout=20, task=self)
+                        # Look it in the eye: an enderman looked at comes for you (no walk
+                        # over hills and into caves after it).
+                        import sight
+                        eye, yaw, pitch, _ = ctx.eye_and_view()
+                        snap = sight.Snapshot.read(ctx.senses, eye)
+                        if sight.entity_visible(snap, eye, yaw, pitch, tuple(e["pos"]), height=2.6, need_fov=False):
+                            ctx.body.call(f"look-at entity {e['id']}")
+                            time.sleep(2.5)
+                        else:
+                            x, y, z = e["pos"]
+                            ctx.walk_to((x, y, z), near=6, timeout=20, task=self)
                     before = ctx.counts().get("minecraft:ender_pearl", 0)
                     said = len(getattr(ctx, "said_log", []))
                     self.sub(Hunt, mob="enderman", count=1)
@@ -661,9 +670,16 @@ class BeatTheGame(Task):
                     if any("don't see" in t for t in getattr(ctx, "said_log", [])[said:]) and                             ctx.counts().get("minecraft:ender_pearl", 0) <= before:
                         skip.add(e.get("id"))  # one in a cave below, out of sight: not that one again
                     continue
+                # On over the land by walking only (the straight-line travel dug through hills
+                # and left him in caves, where endermen can't be seen).
                 pos = ctx.eye_and_view()[3]
-                heading += random.uniform(-0.7, 0.7)
-                self.travel(pos[0] + 40 * math.cos(heading), pos[2] + 40 * math.sin(heading))
+                for _ in range(4):
+                    heading += random.uniform(-0.9, 0.9)
+                    r = ctx.walk_to((pos[0] + 32 * math.cos(heading), pos[1], pos[2] + 32 * math.sin(heading)),
+                                    near=6, timeout=25, task=self)
+                    if r.get("arrived") or math.dist(ctx.eye_and_view()[3], pos) > 12:
+                        break
+                    heading += math.pi / 2
         finally:
             self.night_hunt = False
 
