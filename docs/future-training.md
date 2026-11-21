@@ -41,6 +41,29 @@ One limit: the game can't be sped up. His client runs at 20 ticks a second.
 - Fights at the fortress: wither skeletons plus blazes beat him even with a diamond sword,
   a diamond chestplate and the shield.
 
+## Done (2026-11-21)
+
+- **Mob AI read** (a subagent went through Horizon's source): endermen are about 2% of
+  overworld monster spawns but 100% in a warped forest (groups of 4); arrows never hurt one
+  (it teleports away from every projectile) and it can't teleport while riding; wither
+  skeletons are 2.4 tall (no 2-high gaps), hit about 6 once a second plus Wither I for 10 s;
+  ghast fireballs can be swung back (and kill the ghast); the dragon ignores arrows while
+  perched; piglin bartering gives pearls only about 2% of the time.
+- **Practice arena** (`--quest arena`, `arena.py`): a walled, roofed box in the sky; summons
+  mobs (groups too: `wither_skeleton*2+blaze*2`), fights them in a style (`combat.py`), logs
+  to `arena_results.jsonl`. Pick the fights with `KEVE_ARENA` / `KEVE_ARENA_ROUNDS`.
+- **Results:** one-on-one he beats a zombie, wither skeleton or enderman with any style. Two
+  wither skeletons: plain fighting or the shield mostly loses; the **wall pocket** (owner's
+  idea: 2 high, 2 deep) wins at full health once he's in it, and only loses when they catch
+  him while he digs it. Blazes still shoot into the pocket (it doesn't stop them). **Boat
+  trap** for endermen (owner's idea): 4 of 4 and 2 of 3 won at full health.
+- **Stone axe** is his first weapon everywhere (owner's call); the ender pearl stage uses the
+  boat trap.
+
+Not done yet: the pocket isn't used outside the arena (no fortress left to fight in: the blaze
+rods are in); a Horizon combat command (not needed so far: the Python fights hold up);
+pearls from a warped forest if the overworld boat-trap hunt is too slow.
+
 ## Where training stopped (2026-11-19, about 18:30)
 
 Later the same day, grinding on (deaths keep items in training): all 6 blaze rods (about 5
