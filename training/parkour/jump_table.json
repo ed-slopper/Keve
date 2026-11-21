@@ -1,0 +1,90 @@
+{
+ "gap1": {
+  "gap": 1,
+  "dy": 0,
+  "dz": 0,
+  "land": 3,
+  "tries": 54,
+  "landed": 54,
+  "takeoff_before_edge": {
+   "lo": -0.85,
+   "hi": 1.39,
+   "best": 1.39
+  }
+ },
+ "gap2": {
+  "gap": 2,
+  "dy": 0,
+  "dz": 0,
+  "land": 2,
+  "tries": 52,
+  "landed": 43,
+  "takeoff_before_edge": {
+   "lo": -0.43,
+   "hi": 1.33,
+   "best": 1.33
+  }
+ },
+ "gap3": {
+  "gap": 3,
+  "dy": 0,
+  "dz": 0,
+  "land": 2,
+  "tries": 43,
+  "landed": 30,
+  "takeoff_before_edge": {
+   "lo": -0.47,
+   "hi": 0.1,
+   "best": 0.1
+  }
+ },
+ "up1 gap1": {
+  "gap": 1,
+  "dy": 1,
+  "dz": 0,
+  "land": 2,
+  "tries": 30,
+  "landed": 26,
+  "takeoff_before_edge": {
+   "lo": -0.7,
+   "hi": 0.98,
+   "best": 0.98
+  }
+ },
+ "up1 gap2 to 1x1": {
+  "gap": 2,
+  "dy": 1,
+  "dz": 0,
+  "land": 1,
+  "tries": 26,
+  "landed": 14,
+  "takeoff_before_edge": {
+   "lo": -0.93,
+   "hi": 0.23,
+   "best": 0.23
+  },
+  "brake": 2.0
+ },
+ "down1 gap2 to 1x1": {
+  "gap": 2,
+  "dy": -1,
+  "dz": 0,
+  "land": 1,
+  "tries": 14,
+  "landed": 2,
+  "takeoff_before_edge": {
+   "lo": 0.56,
+   "hi": 0.56,
+   "best": 0.56
+  },
+  "brake": 0.0
+ },
+ "down1 gap3": {
+  "gap": 3,
+  "dy": -1,
+  "dz": 0,
+  "land": 2,
+  "tries": 2,
+  "landed": 0
+ }
+}
