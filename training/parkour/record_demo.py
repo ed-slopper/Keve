@@ -9,6 +9,7 @@ and demo_raw.json (your presses and path). Close the window to stop.
     py -3.11 record_demo.py [your-name]     (Parkour.bat runs it for you)
 """
 import json
+import math
 import os
 import sys
 import time
@@ -41,6 +42,7 @@ def one_run(c, name, since):
     sx, sy, sz = course.start_pos(0)
     presses, seen, start = [], [], None
     pending = []  # presses before the clock starts (the W that starts it)
+    armed, still_since, still_pos = False, None, None
     while True:
         log = c.call(f"input-log --origin user --since {since}")
         since = log.get("last", since)
@@ -54,6 +56,20 @@ def one_run(c, name, since):
         p = s["player"]
         tick = s.get("ticks", 0)
         pos = p["position"]
+        if start is None and not armed:
+            # Ready only once you've stood still on the pad for half a second: back from a
+            # finish you were still holding W and running, so the clock started mid-run.
+            if math.dist(pos, (sx, sy, sz)) > 0.6:
+                to_start(c, name)
+                still_since = None
+            elif still_since is None or math.dist(pos, still_pos) > 0.02:
+                still_since, still_pos = time.time(), pos
+            elif time.time() - still_since > 0.5:
+                armed = True
+                pending = []
+                course.server(f"title {name} actionbar {{\"text\":\"Ready: go!\"}}")
+            time.sleep(0.03)
+            continue
         if start is None:
             moved = abs(pos[0] - sx) > 0.25 or abs(pos[2] - sz) > 0.25
             w = [x for x in pending if x[1] == "w" and x[2] == "down"]
@@ -130,7 +146,7 @@ def loop(name="LilPwoop"):
     print("Fall in or finish and you're back on the pad. Close this window to stop.")
     while True:
         to_start(c, name)
-        course.server(f"title {name} actionbar {{\"text\":\"Go when you're ready\"}}")
+        course.server(f"title {name} actionbar {{\"text\":\"Stand still to get ready\"}}")
         since = c.call("input-log --limit 1").get("last", 0)
         (how, ticks), presses, seen, _ = one_run(c, name, since)
         runs += 1
