@@ -50,9 +50,10 @@ HOSTILE = {
 # fight back when provoked (or, for spiders, in the dark: night or a cave).
 NEUTRAL = {"spider", "enderman", "zombified_piglin", "piglin", "wolf", "bee", "iron_golem",
            "polar_bear", "llama", "trader_llama", "panda", "dolphin", "goat"}
-WEAPONS = ["netherite_sword", "diamond_sword", "iron_sword", "netherite_axe", "diamond_axe",
-           "stone_sword", "iron_axe", "golden_sword", "wooden_sword", "stone_axe", "golden_axe",
-           "wooden_axe"]
+# A stone axe first (the owner's call): 9 a hit, cheap to make again, and it knocks a
+# shield down. Swords only when there's no axe at all.
+WEAPONS = ["stone_axe", "iron_axe", "diamond_axe", "netherite_axe", "netherite_sword", "diamond_sword",
+           "iron_sword", "stone_sword", "golden_sword", "wooden_sword", "golden_axe", "wooden_axe"]
 AXES = ["netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "golden_axe", "wooden_axe"]
 PICKAXES = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe",
             "golden_pickaxe", "wooden_pickaxe"]
@@ -699,7 +700,7 @@ class Ctx:
         held = (self.state().get("held") or {}).get("item", "") or ""
         # Ticks until a full-strength hit again (vanilla attack speed): fists 4/s,
         # swords 1.6/s, axes about 0.8-1/s, anything else 4/s like a fist.
-        cooldown = 13 if held.endswith("_sword") else 22 if held.endswith("_axe") else 5
+        cooldown = 13 if held.endswith("_sword") else 25 if held.endswith("_axe") else 5  # stone axe: 0.8 a second
         try:
             off = self.body.call("inventory").get("offhand") or {}
             shield = "shield" in str(off.get("item") if isinstance(off, dict) else off)

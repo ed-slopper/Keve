@@ -18,6 +18,7 @@ import blocks
 import brain
 import plant
 import room
+import arena
 import game
 import journal
 import containers
@@ -38,7 +39,7 @@ skills.SKILLS.update({c.name: c for c in (mining.Mine, mining.Craft, life.Compan
                                            blocks.BreakBlocks, blocks.UseBlock, blocks.PlaceBlock,
                                            blocks.LookAround, plant.Plant, room.DigRoom, room.ReplaceFloor, room.ReplaceWall, room.Rescue, containers.NewChest,
                                            life.Ride, life.GetOut, life.Recover, life.Sleep, room.DigTo,
-                                           game.BeatTheGame)})
+                                           game.BeatTheGame, arena.Arena)})
 DONE_CROUCH = ("give", "gather", "mine", "craft", "come", "take", "put", "sequence",
                "light_up", "replay", "watch", "break", "place_block", "hunt", "plant", "dig_room", "floor", "wall", "rescue", "new_chest", "handover")
 
@@ -58,6 +59,7 @@ class Keve:
         senses = Senses(self._conns[2])
         self.ctx = skills.Ctx(self.act, senses, self.say, self.owner, self.name)
         self.ctx.skip_night = getattr(args, "skip_night", None)  # training: morning by command
+        self.ctx.server_cmd = getattr(args, "server_cmd", None)  # training only: the practice arena
         self.ctx.make_night = getattr(args, "make_night", None)  # training: dusk by command (endermen)
         self.ctx.unstick = getattr(args, "unstick", None)  # training: hopelessly stuck -> respawn (keeps items)
         self.kev = brain.Kev(args.ollama, args.kev_model) if args.kev_model else None

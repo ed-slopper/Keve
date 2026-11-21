@@ -642,6 +642,9 @@ def main():
                                skip_night=(lambda: subprocess.run(
                                    [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set day"],
                                    capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None,
+                               server_cmd=(lambda line: subprocess.run(
+                                   [str(srv), "--dir", str(SERVER_DIR), "cmd", line],
+                                   capture_output=True, text=True, creationflags=NO_WINDOW).stdout) if args.keep_inventory else None,
                                make_night=(lambda: subprocess.run(
                                    [str(srv), "--dir", str(SERVER_DIR), "cmd", "time set 14000"],
                                    capture_output=True, creationflags=NO_WINDOW)) if args.skip_nights else None)

@@ -14,6 +14,7 @@ import time
 
 import journal
 import sight
+from skills import WEAPONS
 
 
 def count(ctx, item):
@@ -196,7 +197,7 @@ class Dragon:
             # On the fountain (perched, low and slow near 0,0): go and hit it.
             dx, dz = dragon["pos"][0], dragon["pos"][2]
             if math.hypot(dx, dz) < 12 and dragon["pos"][1] < 75:
-                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.select_best(WEAPONS)
                 ctx.hunt(dragon["id"], 8.0, self.task)
             else:
                 # Wait near the fountain, out of the way, shield up.

@@ -42,8 +42,7 @@ class BeatTheGame(Task):
         return [
             ("stone tools", lambda: have(c, "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe")
                 and have(c, "stone_sword", "iron_sword", "diamond_sword")
-                and (have(c, "stone_axe", "iron_axe", "diamond_axe") or have(c, "oak_log", "birch_log", "spruce_log",
-                     "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", n=16)), self.stone_tools),
+                and have(c, "stone_axe", "iron_axe", "diamond_axe"), self.stone_tools),  # the axe is his weapon
             # (an axe is for wood: with a stack of logs he doesn't need one, and making one by
             # the sea had him digging for cobblestone into the water)
             ("food", lambda: have(c, *FOOD, n=5), self.food),
@@ -649,6 +648,13 @@ class BeatTheGame(Task):
                 men = sorted((e for e in ctx.senses.call("entities 48").get("entities", [])
                               if e.get("type") == "minecraft:enderman" and e.get("id") not in skip),
                              key=lambda e: e["distance"])
+                if men and not ctx.counts().get("minecraft:oak_boat") and not any(
+                        i.endswith("_boat") and "chest" not in i for i in ctx.counts()):
+                    import mining
+                    try:
+                        mining.Provision(ctx, self).ensure("oak_boat", 2)  # the trap (the owner's idea)
+                    except Exception:
+                        pass
                 if men:
                     e = men[0]
                     if e["distance"] > 10:
@@ -663,12 +669,21 @@ class BeatTheGame(Task):
                         else:
                             x, y, z = e["pos"]
                             ctx.walk_to((x, y, z), near=6, timeout=20, task=self)
-                    before = ctx.counts().get("minecraft:ender_pearl", 0)
-                    said = len(getattr(ctx, "said_log", []))
-                    self.sub(Hunt, mob="enderman", count=1)
-                    ctx.collect(6, self)
-                    if any("don't see" in t for t in getattr(ctx, "said_log", [])[said:]) and                             ctx.counts().get("minecraft:ender_pearl", 0) <= before:
-                        skip.add(e.get("id"))  # one in a cave below, out of sight: not that one again
+                    # In a boat it can't teleport or walk: a boat down between them, stare,
+                    # it boards, then hit it from two back (tried in the practice arena: won
+                    # every time at full health). No boat to hand: the old hunt.
+                    import combat
+                    r = combat.boat_trap(ctx, e["id"], self, timeout=60)
+                    journal.log("quest", f"pearls: boat trap {r}", pearls=ctx.counts().get("minecraft:ender_pearl", 0))
+                    if r == "noboat":
+                        before = ctx.counts().get("minecraft:ender_pearl", 0)
+                        said = len(getattr(ctx, "said_log", []))
+                        self.sub(Hunt, mob="enderman", count=1)
+                        ctx.collect(6, self)
+                        if any("don't see" in t for t in getattr(ctx, "said_log", [])[said:]) and                                 ctx.counts().get("minecraft:ender_pearl", 0) <= before:
+                            skip.add(e.get("id"))  # one in a cave below, out of sight: not that one again
+                    elif r == "timeout":
+                        skip.add(e.get("id"))
                     continue
                 # On over the land by walking only (the straight-line travel dug through hills
                 # and left him in caves, where endermen can't be seen).

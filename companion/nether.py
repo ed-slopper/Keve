@@ -13,7 +13,7 @@ import time
 
 import journal
 import sight
-from skills import base
+from skills import WEAPONS, base
 
 SIDES = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -684,7 +684,7 @@ class NetherHunt:
             return False
         if not any(e.get("type") == "minecraft:blaze" for e in ctx.senses.call("entities 40").get("entities", [])):
             return False
-        ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+        ctx.select_best(WEAPONS)
         ctx.body.call("mouse right down")
         return True
 
@@ -739,7 +739,7 @@ class NetherHunt:
                 if math.dist(known, m.pos()) > 2.5:
                     ctx.walk_to((known[0] + 0.5, known[1], known[2] + 1.5), near=1.5, timeout=6, task=self.task)
                 b = blazes[0]
-                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.select_best(WEAPONS)
                 if b["distance"] <= 3.6:
                     ctx.body.call("mouse right up")
                     ctx.body.call(f"look-at entity {b['id']}")
@@ -755,7 +755,7 @@ class NetherHunt:
                 ctx.collect(4, self.task)
                 continue
             if blazes and blazes[0]["distance"] <= 16:
-                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.select_best(WEAPONS)
                 ctx.hunt(blazes[0]["id"], 15.0, self.task)
                 time.sleep(0.4)
                 ctx.collect(8, self.task)
@@ -846,7 +846,7 @@ class NetherHunt:
             return
         for e in ctx.senses.call("entities 16").get("entities", []):
             if e.get("type") == "minecraft:enderman":
-                ctx.select_best(["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"])
+                ctx.select_best(WEAPONS)
                 ctx.hunt(e["id"], 20.0, self.task)
                 time.sleep(0.6)
                 ctx.collect(6, self.task)
