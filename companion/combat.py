@@ -235,22 +235,56 @@ def boat_trap(ctx, mob_id, task=None, timeout=60.0):
     m = _mob(ctx, mob_id)
     if m is None:
         return "won"
+    # Stare it in first and let it come: a boat put down toward one 40 blocks off is in the
+    # wrong place by the time it gets here.
+    import journal
+    import sight
+    wait_until = time.time() + 20
+    while m is not None and m["distance"] > 12 and time.time() < wait_until:
+        if task is not None and task.done():
+            return "timeout"
+        b.call(f"look-at entity {mob_id}")
+        time.sleep(0.3)
+        m = _mob(ctx, mob_id)
+    if m is None:
+        return "won"
+    if m["distance"] > 12:
+        return "timeout"
     p = ctx.state()["player"]
     x, y, z = p["block_pos"]
     mx, _, mz = m["pos"]
     dx, dz = mx - (x + 0.5), mz - (z + 0.5)
     step = (1 if dx > 0 else -1, 0) if abs(dx) >= abs(dz) else (0, 1 if dz > 0 else -1)
-    floor = (x + 2 * step[0], y - 1, z + 2 * step[1])
-    # (Boats aren't in the entity list: placing it is told by the boat leaving his hands.)
+    side = (step[1], step[0])
+    snap = sight.Snapshot.read(ctx.senses, (x, y, z), rh=4, rv=3)
+    # A floor block with room for the boat on it: two ahead first, then near it.
+    spots = []
+    for ahead, off in ((2, 0), (2, 1), (2, -1), (1, 0), (3, 0), (1, 1), (1, -1)):
+        f = (x + ahead * step[0] + off * side[0], y - 1, z + ahead * step[1] + off * side[1])
+        above = (f[0], y, f[2])
+        if sight.blocks_body(snap.name(f)) and not sight.is_fluid(snap.name(f)) \
+                and not sight.blocks_body(snap.name(above)) and not sight.is_fluid(snap.name(above)):
+            spots.append(f)
     ctx.to_hotbar(boat_items[0])
     b.call(f"select {boat_items[0]}")
-    b.call(f"look-at block {floor[0]} {floor[1]} {floor[2]}")
-    before = ctx.counts().get(boat_items[0], 0)
-    b.call(f"interact {floor[0]} {floor[1]} {floor[2]} up")
-    time.sleep(0.5)
-    if ctx.counts().get(boat_items[0], 0) >= before:
-        import journal
-        journal.log("note", "boat trap: the boat didn't go down", at=list(floor))
+    floor = None
+    for f in spots[:4]:
+        # grass or flowers on it: out of the way first (a boat doesn't go down on them)
+        a = snap.name((f[0], y, f[2]))
+        if a and a != "minecraft:air" and not sight.blocks_body(a):
+            b.call(f"look-at block {f[0]} {y} {f[2]}")
+            b.call(f"break {f[0]} {y} {f[2]} --timeout 2")
+            ctx.to_hotbar(boat_items[0])
+            b.call(f"select {boat_items[0]}")
+        before = ctx.counts().get(boat_items[0], 0)
+        b.call(f"look-at block {f[0]} {f[1]} {f[2]}")
+        b.call(f"interact {f[0]} {f[1]} {f[2]} up")
+        time.sleep(0.5)
+        if ctx.counts().get(boat_items[0], 0) < before:
+            floor = f
+            break
+    if floor is None:
+        journal.log("note", "boat trap: the boat didn't go down", tried=[list(f) for f in spots[:4]])
         return "noboat"
     seat = (floor[0] + 0.5, y, floor[2] + 0.5)
     ctx.select_best(SWORDS)
