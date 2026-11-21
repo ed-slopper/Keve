@@ -4,12 +4,12 @@
   "dy": 0,
   "dz": 0,
   "land": 3,
-  "tries": 231,
-  "landed": 231,
+  "tries": 504,
+  "landed": 502,
   "takeoff_before_edge": {
    "lo": -0.85,
-   "hi": 2.03,
-   "best": 1.39
+   "hi": 2.21,
+   "best": 1.89
   }
  },
  "gap2": {
@@ -17,11 +17,11 @@
   "dy": 0,
   "dz": 0,
   "land": 2,
-  "tries": 229,
-  "landed": 116,
+  "tries": 488,
+  "landed": 206,
   "takeoff_before_edge": {
    "lo": -0.43,
-   "hi": 1.33,
+   "hi": 4.61,
    "best": 1.33
   }
  },
@@ -30,8 +30,8 @@
   "dy": 0,
   "dz": 0,
   "land": 2,
-  "tries": 116,
-  "landed": 103,
+  "tries": 206,
+  "landed": 187,
   "takeoff_before_edge": {
    "lo": -0.47,
    "hi": 0.1,
@@ -43,8 +43,8 @@
   "dy": 1,
   "dz": 0,
   "land": 2,
-  "tries": 103,
-  "landed": 99,
+  "tries": 187,
+  "landed": 183,
   "takeoff_before_edge": {
    "lo": -0.7,
    "hi": 0.98,
@@ -56,8 +56,8 @@
   "dy": 1,
   "dz": 0,
   "land": 1,
-  "tries": 99,
-  "landed": 86,
+  "tries": 183,
+  "landed": 166,
   "takeoff_before_edge": {
    "lo": -0.93,
    "hi": 0.23,
@@ -70,12 +70,12 @@
   "dy": -1,
   "dz": 0,
   "land": 1,
-  "tries": 86,
-  "landed": 70,
+  "tries": 166,
+  "landed": 150,
   "takeoff_before_edge": {
-   "lo": 0.0,
+   "lo": -0.13,
    "hi": 0.56,
-   "best": 0.56
+   "best": 0.41
   },
   "brake": 0.0
  },
@@ -84,12 +84,12 @@
   "dy": -1,
   "dz": 0,
   "land": 2,
-  "tries": 70,
-  "landed": 62,
+  "tries": 150,
+  "landed": 142,
   "takeoff_before_edge": {
    "lo": -0.79,
    "hi": 0.4,
-   "best": 0.4
+   "best": 0.08
   }
  },
  "gap1 side1 to 1x1": {
@@ -97,25 +97,75 @@
   "dy": 0,
   "dz": 1,
   "land": 1,
-  "tries": 61,
-  "landed": 4,
+  "tries": 141,
+  "landed": 67,
   "takeoff_before_edge": {
-   "lo": 0.84,
+   "lo": 0.34,
    "hi": 0.86,
-   "best": 0.85
+   "best": 0.67
   },
   "strafe": [
    0,
-   8
+   4
   ],
-  "brake": 4.5
+  "brake": 6
  },
  "gap2 side1 to 1x1": {
   "gap": 2,
   "dy": 0,
   "dz": -1,
   "land": 1,
-  "tries": 4,
-  "landed": 0
+  "tries": 67,
+  "landed": 35,
+  "takeoff_before_edge": {
+   "lo": -0.97,
+   "hi": -0.51,
+   "best": -0.56
+  },
+  "strafe": [
+   0,
+   8
+  ],
+  "brake": 0
+ },
+ "down1 gap3 #10": {
+  "gap": 3,
+  "dy": -1,
+  "dz": 0,
+  "land": 2,
+  "tries": 35,
+  "landed": 29,
+  "takeoff_before_edge": {
+   "lo": -0.89,
+   "hi": -0.3,
+   "best": -0.31
+  }
+ },
+ "gap2 to 1x1": {
+  "gap": 2,
+  "dy": 0,
+  "dz": 0,
+  "land": 1,
+  "tries": 29,
+  "landed": 13,
+  "takeoff_before_edge": {
+   "lo": 0.17,
+   "hi": 0.31,
+   "best": 0.17
+  },
+  "brake": 0
+ },
+ "gap3 to finish": {
+  "gap": 3,
+  "dy": 0,
+  "dz": 0,
+  "land": 3,
+  "tries": 13,
+  "landed": 4,
+  "takeoff_before_edge": {
+   "lo": -1.04,
+   "hi": -1.03,
+   "best": -1.04
+  }
  }
 }
