@@ -79,6 +79,23 @@ def from_guess():
     return Route(delays, strafe)
 
 
+def combine(bots, demo):
+    """The bots' timing with your steering where it matters: your mouse in a window round each
+    side jump (moved to the bots' jump tick), straight east everywhere else. (Your whole track,
+    absolute, steered a racer a little off your line off the one-wide platforms.)"""
+    r = copy.deepcopy(bots)
+    r.looks = []
+    tb, tu = 0, 0
+    for j, (gap, dy, dz, land, kind) in enumerate(course.JUMPS):
+        tb += bots.delays[j]
+        tu += demo.delays[j]
+        if dz:
+            win = [x for x in demo.looks if tu - 6 <= x[0] <= tu + 14]
+            r.looks += [[x[0] - tu + tb, x[1], x[2]] for x in win]
+            r.looks.append([tb + 15, -90.0, 0.0])  # and straight again after
+    return r
+
+
 def seed():
     # Your newest run first (a fresh demo beats the bots' older best).
     if DEMO.exists() and (not BEST.exists() or DEMO.stat().st_mtime > BEST.stat().st_mtime):
@@ -217,6 +234,9 @@ def main():
     pool = Pool(n)
     route = seed()
     first = int(sys.argv[2]) - 1 if len(sys.argv) > 2 else 0  # resume: py train.py 3 9
+    if len(sys.argv) > 3 and sys.argv[3] == "combine":
+        route = combine(Route.from_json(json.loads((HERE / "bots_best.json").read_text())),
+                        Route.from_json(json.loads(DEMO.read_text())))
     route, reached = jump_by_jump(pool, route, first)
     if reached == len(course.JUMPS):
         polish(pool, route)

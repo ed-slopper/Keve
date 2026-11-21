@@ -71,6 +71,9 @@ def run(n, lane, timeline, max_ticks=600):
         act.call("respawn")  # (a fall into the void before the water went in)
         time.sleep(2)
     course.server(f"effect give Racer{n} minecraft:instant_health 1 5")
+    # Fed: with an empty food bar there's no sprinting (an hour of runs starved them, and
+    # every route ran at a walk and fell short).
+    course.server(f"effect give Racer{n} minecraft:saturation 2 20")
     course.server(f"tp Racer{n} {sx} {sy} {sz} -90 0")
     for k in ("w", "a", "s", "d", "space", "ctrl", "shift"):
         act.call(f"key {k} up")
