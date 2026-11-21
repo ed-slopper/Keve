@@ -145,12 +145,24 @@ def jump_by_jump(pool, route, start=0):
         if not ok:
             print(f"jump {k + 1} ({kind}): none of {len(cands)} landed; widening")
             wide = []
-            for d in range(-9, 10):
+            strafes = [(s0, sl) for s0 in (0, 2, 4) for sl in (3, 5, 7, 9)] if dz else [None]
+            for d in range(-6, 7, 2 if dz else 1):
                 for br in ((0, 3, 6) if land == 1 else (0,)):
-                    r = copy.deepcopy(route)
-                    r.delays[k] = max(1, r.delays[k] + d)
-                    r.brake[k] = br
-                    wide.append(r)
+                    for st in strafes:
+                        r = copy.deepcopy(route)
+                        r.delays[k] = max(1, r.delays[k] + d)
+                        r.brake[k] = br
+                        if st:
+                            r.strafe[k] = list(st)
+                        wide.append(r)
+            # The landing before decides how he sets off: its brake too.
+            if k and course.JUMPS[k - 1][3] == 1:
+                for br in (0, 2, 4, 6, 8):
+                    for d in (-2, 0, 2):
+                        r = copy.deepcopy(route)
+                        r.brake[k - 1] = br
+                        r.delays[k] = max(1, r.delays[k] + d)
+                        wide.append(r)
             res = pool.many([(c, k, f"jump {k + 1} wide") for c in wide])
             ok = [(land_tick(x, k + 1), c) for x, c in zip(res, wide) if land_tick(x, k + 1) is not None]
             if not ok:
@@ -199,7 +211,8 @@ def main():
             sys.exit(f"Racer{i} didn't start")
     pool = Pool(n)
     route = seed()
-    route, reached = jump_by_jump(pool, route)
+    first = int(sys.argv[2]) - 1 if len(sys.argv) > 2 else 0  # resume: py train.py 3 9
+    route, reached = jump_by_jump(pool, route, first)
     if reached == len(course.JUMPS):
         polish(pool, route)
 

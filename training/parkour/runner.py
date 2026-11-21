@@ -24,6 +24,7 @@ class Result:
     ticks: int                   # ticks to the finish (or to where it stopped)
     takeoffs: list = field(default_factory=list)   # (tick, x, y, z) of each jump's takeoff
     landings: list = field(default_factory=list)   # (tick, platform) of each landing
+    trace: list = field(default_factory=list)      # (tick, x) as seen, for exact takeoffs
 
     def score(self):
         """Bigger is better: platforms first, then speed (a finish beats any non-finish)."""
@@ -145,7 +146,8 @@ def run(n, lane, timeline, max_ticks=600):
                 finished, fin_tick = True, rel
         was_ground = ground
     ticks = fin_tick if finished else ((seen[-1][0] - t0) if seen else 0)
-    return Result(reached, finished, fell, ticks, takeoffs, landings)
+    trace = [((t or 0) - t0, round(pos[0], 3)) for t, pos, _ in seen]
+    return Result(reached, finished, fell, ticks, takeoffs, landings, trace)
 
 
 def guess(lane=0):

@@ -30,6 +30,15 @@ def table():
             if k >= len(takeoffs) or (k > 0 and k not in landed):
                 break
             _, x, y, z = takeoffs[k]
+            tr = r.get("trace")
+            if tr:
+                # Exact: where he was on the jump's own tick (the press lands the tick after).
+                jt = sum(r["route"]["delays"][:k + 1]) + 1
+                before = [p for p in tr if p[0] <= jt]
+                after = [p for p in tr if p[0] > jt]
+                if before and after:
+                    (t1, x1), (t2, x2) = before[-1], after[0]
+                    x = x1 + (x2 - x1) * (jt - t1) / max(1, t2 - t1)
             edge = ps[k].x1 + 1.0
             tries[k].append((round(edge - x, 2), (k + 1) in landed,
                              r["route"]["strafe"][k], r["route"]["brake"][k]))
