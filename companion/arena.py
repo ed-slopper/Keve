@@ -103,6 +103,8 @@ class Arena(Task):
         plan = [p for p in (os.environ.get("KEVE_ARENA") or ",".join(DEFAULT)).split(",") if p]
         rounds = int(os.environ.get("KEVE_ARENA_ROUNDS", "3"))
         ctx.say("practice arena! let's see which way of fighting works.")
+        home = ctx.state()["player"]["position"]  # back here after (left in the box, the quest
+        # took it for underground and dug out onto a box 180 blocks up)
         self.cmd(f"forceload add {X - R} {Z - R} {X + R} {Z + R}")
         done, pending = self.progress()
         if pending:
@@ -150,4 +152,5 @@ class Arena(Task):
                             "result": result, "hp": hp, "secs": round(time.time() - t0, 1)})
                 if result == "lost":
                     time.sleep(6)  # respawned with his things (training): back in for the next one
+        self.cmd(f"execute in minecraft:overworld run tp Keve {home[0]:.2f} {home[1]:.2f} {home[2]:.2f}")
         ctx.say("arena done!")
