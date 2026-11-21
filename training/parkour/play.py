@@ -1,6 +1,6 @@
 """Parkour.bat: everything for your parkour runs in one click.
 
-1. Only one bot at a time (less lag): stops Keve's own training and the racers.
+1. Less lag: stops the parkour racers and their trainer (Keve's own quest keeps going).
 2. The server (and the skin proxy) up, the course built.
 3. Your Horizon started with its control link, joined to the server (or the one you have
    open, if it already has the link).
@@ -33,8 +33,8 @@ def step(t):
 
 
 def stop_bots():
-    """Keve's own training, the racers and their trainer: closed (one bot at a time)."""
-    ps = r"""Get-CimInstance Win32_Process | ?{ ($_.CommandLine -match 'launch.py' -and $_.CommandLine -notmatch 'play.py') -or $_.CommandLine -match 'train.py' -or $_.CommandLine -match 'runloop.sh' -or ($_.CommandLine -match 'horizon-client' -and ($_.CommandLine -match 'keve-ctl.json' -or $_.CommandLine -match 'racers')) } | %{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""
+    """The racers and their trainer: closed while you run (Keve's own quest can keep going)."""
+    ps = r"""Get-CimInstance Win32_Process | ?{ $_.CommandLine -match 'train.py' -or ($_.CommandLine -match 'horizon-client' -and $_.CommandLine -match 'racers') } | %{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
 
 
@@ -47,9 +47,9 @@ def your_game_up():
 
 
 def main():
-    step("One bot at a time")
+    step("Less lag")
     stop_bots()
-    print("Keve's training and the racers are closed while you run.")
+    print("The parkour racers are closed while you run (Keve's quest keeps going).")
 
     step("The server")
     ctl_exe, srv = launch.horizon_tools()

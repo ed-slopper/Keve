@@ -65,7 +65,8 @@ def one_run(c, name, since):
                 to_start(c, name)  # wandered off before starting
             time.sleep(0.03)
             continue
-        seen.append([tick - start, [round(v, 3) for v in pos], bool(p.get("on_ground"))])
+        seen.append([tick - start, [round(v, 3) for v in pos], bool(p.get("on_ground")),
+                     round(p.get("yaw", -90.0), 2), round(p.get("pitch", 0.0), 2)])
         plat, fell = course.where(pos, 0, ps)
         if fell or pos[1] < min(q.y for q in ps) - 1.5:
             return ("fell", None), [[t - start, k, a] for t, k, a in presses], seen, since
@@ -74,7 +75,24 @@ def one_run(c, name, since):
         time.sleep(0.03)
 
 
-def route_from(presses):
+def looks_from(seen):
+    """Your mouse, as a per-tick turn track: the yaw and pitch you had on each tick (from the
+    samples, filled in between), kept only where it changed by a quarter degree or more."""
+    pts = [(s[0], s[3], s[4]) for s in seen if len(s) >= 5]
+    if not pts:
+        return []
+    out, last = [], None
+    for (t1, y1, p1), (t2, y2, p2) in zip(pts, pts[1:] + [pts[-1]]):
+        for t in range(t1, max(t1 + 1, t2)):
+            f = (t - t1) / max(1, t2 - t1)
+            y, p = y1 + (y2 - y1) * f, p1 + (p2 - p1) * f
+            if last is None or abs(y - last[0]) >= 0.25 or abs(p - last[1]) >= 0.25:
+                out.append([t, round(y, 2), round(p, 2)])
+                last = (y, p)
+    return out
+
+
+def route_from(presses, seen=()):
     """Your presses as the trainer's route: each jump's delay, strafes round it, time off W."""
     import train
     route = train.from_guess()
@@ -93,6 +111,7 @@ def route_from(presses):
         ons = [tt for tt, k, a in presses if k == "w" and a == "down" and offs and tt > offs[0]]
         if offs and ons:
             route.brake[j] = ons[0] - offs[0]
+    route.looks = looks_from(seen)
     return route, len(jumps)
 
 
@@ -120,7 +139,7 @@ def loop(name="LilPwoop"):
             msg = f"run {runs}: finished in {ticks} ticks ({secs:.2f} s)"
             if best is None or ticks < best:
                 best = ticks
-                route, nj = route_from(presses)
+                route, nj = route_from(presses, seen)
                 (HERE / "demo.json").write_text(json.dumps(route.to_json()))
                 (HERE / "demo_raw.json").write_text(json.dumps({"ticks": ticks, "presses": presses, "seen": seen}))
                 msg += f"  - your best! saved ({nj} jumps seen)"

@@ -94,7 +94,7 @@ def run(n, lane, timeline, max_ticks=600):
     # socket, presses landed 0-3 ticks late at random, too loose for parkour).
     steps = {}
     for t, a in sorted(timeline):
-        steps.setdefault(str(t), []).append(f"key {a}")
+        steps.setdefault(str(t), []).append(a if a.startswith("look") else f"key {a}")
     end_tick = (max(t for t, _ in timeline) if timeline else 0) + 40  # then it runs on a little, keys held
     for k in ("w", "a", "d", "space", "ctrl"):
         steps.setdefault(str(end_tick), []).append(f"key {k} up")

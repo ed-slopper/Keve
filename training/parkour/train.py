@@ -37,22 +37,24 @@ class Route:
     strafe (start after the jump, length; 0 length none), brake (ticks of no forward
     starting 9 after the jump: 0 none)."""
 
-    def __init__(self, delays, strafe=None, brake=None):
+    def __init__(self, delays, strafe=None, brake=None, looks=None):
         n = len(course.JUMPS)
+        self.looks = [list(x) for x in (looks or [])]  # [tick, yaw, pitch]: your mouse, per tick
         self.delays = list(delays)
         self.strafe = [list(s) for s in (strafe or [[0, 0]] * n)]
         self.brake = list(brake or [0] * n)
 
     def to_json(self):
-        return {"delays": self.delays, "strafe": self.strafe, "brake": self.brake}
+        return {"delays": self.delays, "strafe": self.strafe, "brake": self.brake, "looks": self.looks}
 
     @classmethod
     def from_json(cls, d):
-        return cls(d["delays"], d.get("strafe"), d.get("brake"))
+        return cls(d["delays"], d.get("strafe"), d.get("brake"), d.get("looks"))
 
     def timeline(self, upto=None):
         """The key timeline, cut short after jump `upto` (0-based) when given."""
         tl = [(0, "w down"), (0, "ctrl down")]
+        tl += [(lt, f"look {y} {p}") for lt, y, p in self.looks]
         t = 0
         for j, (gap, dy, dz, land, kind) in enumerate(course.JUMPS):
             t += self.delays[j]
@@ -78,6 +80,9 @@ def from_guess():
 
 
 def seed():
+    # Your newest run first (a fresh demo beats the bots' older best).
+    if DEMO.exists() and (not BEST.exists() or DEMO.stat().st_mtime > BEST.stat().st_mtime):
+        return Route.from_json(json.loads(DEMO.read_text()))
     if BEST.exists():
         return Route.from_json(json.loads(BEST.read_text()))
     if DEMO.exists():
